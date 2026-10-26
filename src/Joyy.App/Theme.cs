@@ -6,18 +6,77 @@ namespace Joyy.App;
 /// <summary>Dark theme: palette plus helpers that make stock WinForms controls fit it.</summary>
 internal static partial class Theme
 {
-    public static readonly Color Background = Color.FromArgb(0x0E, 0x10, 0x14);
-    public static readonly Color Card = Color.FromArgb(0x16, 0x19, 0x20);
-    public static readonly Color Raised = Color.FromArgb(0x1E, 0x22, 0x2B);
-    public static readonly Color Hover = Color.FromArgb(0x28, 0x2D, 0x38);
-    public static readonly Color Border = Color.FromArgb(0x2A, 0x30, 0x3B);
-    public static readonly Color Text = Color.FromArgb(0xE7, 0xEA, 0xF0);
-    public static readonly Color Muted = Color.FromArgb(0x8B, 0x93, 0xA5);
-    public static readonly Color Accent = Color.FromArgb(0x4C, 0x8D, 0xFF);
-    public static readonly Color Good = Color.FromArgb(0x2E, 0xCC, 0x71);
-    public static readonly Color Warn = Color.FromArgb(0xF5, 0xA5, 0x24);
-    public static readonly Color Bad = Color.FromArgb(0xFF, 0x5C, 0x5C);
-    public static readonly Color Idle = Color.FromArgb(0x6B, 0x73, 0x85);
+    // Window background: a purple-to-navy diagonal gradient; content sits on rounded cards.
+    public static readonly Color BgTop = Color.FromArgb(0x2A, 0x1C, 0x3D);
+    public static readonly Color BgBottom = Color.FromArgb(0x10, 0x16, 0x2A);
+    public static readonly Color Background = Color.FromArgb(0x1A, 0x18, 0x2E);
+    public static readonly Color Card = Color.FromArgb(0x26, 0x20, 0x38);
+    public static readonly Color Raised = Color.FromArgb(0x31, 0x29, 0x46);
+    public static readonly Color Hover = Color.FromArgb(0x38, 0x2F, 0x50);
+    public static readonly Color Border = Color.FromArgb(0x3D, 0x34, 0x55);
+    public static readonly Color Text = Color.FromArgb(0xEE, 0xEA, 0xF5);
+    public static readonly Color Muted = Color.FromArgb(0xA6, 0x9C, 0xBA);
+    public static readonly Color Accent = Color.FromArgb(0xE2, 0x6B, 0xE0);   // pink-violet, buttons/toggles/selection
+    public static readonly Color PsBlue = Color.FromArgb(0x4C, 0x8D, 0xFF);   // DualSense highlights
+    public static readonly Color Good = Color.FromArgb(0x3D, 0xD6, 0x8C);
+    public static readonly Color Warn = Color.FromArgb(0xF5, 0xB1, 0x4C);
+    public static readonly Color Bad = Color.FromArgb(0xFF, 0x6B, 0x6B);
+    public static readonly Color Idle = Color.FromArgb(0x7D, 0x74, 0x92);
+
+    /// <summary>Windows 11 icon font, falling back to the Windows 10 one.</summary>
+    public static readonly FontFamily IconFamily = PickIconFamily();
+
+    static FontFamily PickIconFamily()
+    {
+        foreach (var name in new[] { "Segoe Fluent Icons", "Segoe MDL2 Assets" })
+        {
+            try { return new FontFamily(name); }
+            catch (ArgumentException) { }
+        }
+        return FontFamily.GenericSansSerif;
+    }
+
+    public static Font IconFont(float points) => new(IconFamily, points);
+
+    /// <summary>Glyphs from Segoe Fluent Icons / MDL2 Assets.</summary>
+    public static class Glyph
+    {
+        public const string Home = "";
+        public const string Controller = "";
+        public const string Profiles = "";
+        public const string Mapping = "";
+        public const string Sticks = "";
+        public const string Hide = "";
+        public const string Log = "";
+        public const string Settings = "";
+        public const string Info = "";
+        public const string Chevron = "";
+        public const string Back = "";
+        public const string Check = "";
+        public const string Cancel = "";
+        public const string Warning = "";
+        public const string Power = "";
+        public const string Bluetooth = "";
+        public const string Usb = "";
+        public const string Add = "";
+        public const string Delete = "";
+        public const string Folder = "";
+        public const string Vibrate = "";
+        public const string Picture = "";
+        public const string Refresh = "";
+        public const string Shield = "";
+        public const string Link = "";
+        public const string Game = "";
+        public const string Edit = "";
+    }
+
+    public static void PaintBackground(Graphics g, Rectangle bounds)
+    {
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            return;
+        using var brush = new LinearGradientBrush(bounds, BgTop, BgBottom, 35f);
+        g.FillRectangle(brush, bounds);
+    }
 
     // PlayStation symbol colors (used for the press glow) and Xbox 360 face buttons.
     public static readonly Color PsTriangle = Color.FromArgb(0x2B, 0xD4, 0x7D);

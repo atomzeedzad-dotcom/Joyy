@@ -1,4 +1,4 @@
-using System.Diagnostics;
+using System.Drawing.Drawing2D;
 using Joyy.Core;
 using Joyy.Platform;
 
@@ -7,11 +7,14 @@ namespace Joyy.App;
 internal interface IAppActions
 {
     void TogglePause();
+    /// <summary>Virtual Xbox controller on (bridge running) or off (paused).</summary>
+    void SetVirtualDevice(bool on);
     /// <summary>Saves the editor's profiles into the current config; other settings are left as they are now.</summary>
     string? SaveProfiles(Profile global, IReadOnlyList<Profile> games);
     void SetStartWithWindows(bool enabled);
     void SetStartMinimized(bool enabled);
     void SetHideDualSense(bool enabled);
+    void TestRumble(double strength);
     void OpenLogFolder();
     void OpenConfigFile();
     void Exit();
@@ -50,121 +53,59 @@ internal readonly record struct StatusView(Color Color, Icon Icon, string Title,
     };
 }
 
+/// <summary>
+/// DSX-style shell: gradient window, sidebar navigation, a controller chip at the top and one
+/// page at a time below it.
+/// </summary>
 internal sealed class MainForm : Form
 {
-    const int MaxLogLines = 500;
-
-    readonly IAppActions _actions;
-    readonly PadView _dsView = new(PadView.PadKind.DualSense) { Dock = DockStyle.Fill };
-    readonly PadView _xbView = new(PadView.PadKind.Xbox) { Dock = DockStyle.Fill };
-    readonly Dot _dot = new();
-    readonly Label _status = new() { AutoSize = true, Font = new Font("Segoe UI Semibold", 14f), ForeColor = Theme.Text };
-    readonly Label _detail = new() { AutoSize = true, ForeColor = Theme.Muted };
-    readonly Button _pause = Theme.MakeButton("Pause");
-    readonly Label _controller = Value(), _virtual = Value(), _profile = Value(), _others = Value();
-    readonly LinkLabel _hiding = new()
-    {
-        AutoSize = true, MaximumSize = new Size(760, 0), LinkColor = Theme.Accent,
-        ActiveLinkColor = Theme.Accent, VisitedLinkColor = Theme.Accent, ForeColor = Theme.Text,
-    };
-    readonly CheckBox _hideDualSense = Theme.MakeCheckBox("Hide the DualSense from games (recommended)");
-    readonly CheckBox _startWithWindows = Theme.MakeCheckBox("Start Joyy with Windows");
-    readonly CheckBox _startMinimized = Theme.MakeCheckBox("Start hidden in the tray");
-    readonly TextBox _log = new()
-    {
-        Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill,
-        BorderStyle = BorderStyle.None, BackColor = Theme.Card, ForeColor = Theme.Text, Font = new Font("Cascadia Mono", 9f),
-    };
-    readonly List<string> _logLines = new();
-    readonly Panel _content = new() { Dock = DockStyle.Fill, BackColor = Theme.Background };
-    readonly List<(Button Button, Control Page)> _pages = new();
-    readonly FlowLayoutPanel _nav = new()
-    {
-        Dock = DockStyle.Bottom, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-        BackColor = Theme.Card, WrapContents = false, Padding = new Padding(14, 0, 0, 0),
-    };
+    readonly ShellContext _ctx;
+    readonly Dictionary<string, (NavItem Nav, Page Page)> _pages = new();
+    readonly ClearPanel _host = new() { Dock = DockStyle.Fill };
+    readonly Label _title = new() { AutoSize = true, UseMnemonic = false, ForeColor = Theme.Text, BackColor = Color.Transparent, Font = new Font("Segoe UI Semibold", 17f) };
+    readonly Label _subtitle = new() { AutoSize = true, ForeColor = Theme.Muted, BackColor = Color.Transparent, Font = new Font("Segoe UI", 9.5f) };
+    readonly ControllerChip _chip;
+    readonly LogPage _log;
+    string _current = "";
     bool _allowClose;
-    bool _loadingOptions;
-    StatusView? _shownStatus;
 
     public MainForm(IAppActions actions)
     {
-        _actions = actions;
-        Text = "Joyy — DualSense to Xbox 360";
+        Text = "Joyy";
         Icon = Icons.App;
         BackColor = Theme.Background;
         ForeColor = Theme.Text;
-        ClientSize = new Size(1080, 760);
-        MinimumSize = new Size(860, 640);
+        DoubleBuffered = true;
+        ClientSize = new Size(1260, 820);
+        MinimumSize = new Size(1080, 720);
         StartPosition = FormStartPosition.CenterScreen;
+        Font = new Font("Segoe UI", 9f);
 
-        Profiles = new ProfileEditor(actions.SaveProfiles) { Dock = DockStyle.Fill };
+        Session = new ProfileSession(actions.SaveProfiles);
+        _ctx = new ShellContext(actions, Session);
+        LoadSkins();
 
-        var header = BuildHeader();
-        AddPage("Overview", BuildOverview());
-        AddPage("Profiles", Profiles);
-        AddPage("Log", BuildLog());
+        _chip = new ControllerChip(actions) { Location = new Point(0, 0) };
+        _log = new LogPage(_ctx);
 
-        Controls.Add(_content);
-        Controls.Add(header);
-        ShowPage(0);
+        var sidebar = BuildSidebar();
+        var content = new ClearPanel { Dock = DockStyle.Fill, Padding = new Padding(4, 16, 0, 0) };
+        var top = new ClearPanel { Dock = DockStyle.Top, Height = 132 };
+        top.Controls.Add(_chip);
+        var titles = new FlowLayoutPanel { Location = new Point(0, 70), AutoSize = true, FlowDirection = FlowDirection.TopDown, BackColor = Color.Transparent, WrapContents = false };
+        titles.Controls.Add(_title);
+        titles.Controls.Add(_subtitle);
+        top.Controls.Add(titles);
+        content.Controls.Add(_host);
+        content.Controls.Add(top);
+        Controls.Add(content);
+        Controls.Add(sidebar);
 
-        _pause.Click += (_, _) => _actions.TogglePause();
-        _startWithWindows.CheckedChanged += (_, _) => { if (!_loadingOptions) _actions.SetStartWithWindows(_startWithWindows.Checked); };
-        _startMinimized.CheckedChanged += (_, _) => { if (!_loadingOptions) _actions.SetStartMinimized(_startMinimized.Checked); };
-        _hideDualSense.CheckedChanged += (_, _) => { if (!_loadingOptions) _actions.SetHideDualSense(_hideDualSense.Checked); };
-        _hiding.LinkClicked += (_, _) => OpenUrl(DependencyChecker.HidHideUrl);
-        Theme.DarkScrollbars(_log);
-
-        foreach (var view in new[] { _dsView, _xbView })
-            SetupPicture(view);
+        _ctx.NavigateRequested += ShowPage;
+        ShowPage("home");
     }
 
-    /// <summary>Loads the user's controller photo (if any) and adds the right-click menu to change it.</summary>
-    void SetupPicture(PadView view)
-    {
-        try
-        {
-            if (PhotoSkin.Find(view.Kind) is { } path)
-                view.Skin = PhotoSkin.Load(path);
-        }
-        catch (Exception)
-        {
-            view.Skin = null; // unreadable photo: fall back to the drawing
-        }
-
-        var menu = new ContextMenuStrip { Renderer = new Theme.MenuRenderer(), BackColor = Theme.Card, ForeColor = Theme.Text };
-        menu.Items.Add("Use a photo of the controller…", null, (_, _) =>
-        {
-            using var dialog = new OpenFileDialog
-            {
-                Title = view.Kind == PadView.PadKind.DualSense ? "Choose a DualSense photo" : "Choose an Xbox controller photo",
-                Filter = "Images (*.png;*.jpg;*.jpeg;*.webp;*.bmp)|*.png;*.jpg;*.jpeg;*.webp;*.bmp",
-            };
-            if (dialog.ShowDialog(this) != DialogResult.OK)
-                return;
-            try
-            {
-                var old = view.Skin;
-                view.Skin = PhotoSkin.Install(view.Kind, dialog.FileName);
-                old?.Dispose();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(this, $"Could not use that picture: {ex.Message}", "Joyy", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            }
-        });
-        menu.Items.Add("Use the built-in drawing", null, (_, _) =>
-        {
-            var old = view.Skin;
-            view.Skin = null;
-            old?.Dispose();
-            PhotoSkin.Remove(view.Kind);
-        });
-        view.ContextMenuStrip = menu;
-    }
-
-    public ProfileEditor Profiles { get; }
+    public ProfileSession Session { get; }
 
     /// <summary>Raised the first time the window is closed to the tray.</summary>
     public event Action? HiddenToTray;
@@ -175,68 +116,114 @@ internal sealed class MainForm : Form
         Theme.DarkTitleBar(this);
     }
 
-    public void UpdateLive(BridgeSnapshot s, StatusView status, Profile active)
-    {
-        bool live = s.Running && s.Device is not null;
-        _dsView.SetState(s.Input, s.Output, live);
-        _xbView.SetState(s.Input, s.Output, live && s.Status == BridgeStatus.Running);
+    protected override void OnPaintBackground(PaintEventArgs e) => Theme.PaintBackground(e.Graphics, ClientRectangle);
 
-        if (_shownStatus != status)
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        Invalidate();
+    }
+
+    void LoadSkins()
+    {
+        foreach (var kind in new[] { PadView.PadKind.DualSense, PadView.PadKind.Xbox })
         {
-            _shownStatus = status;
-            _dot.Color = status.Color;
-            _status.Text = status.Title;
-            _detail.Text = status.Detail;
+            try
+            {
+                var skin = PhotoSkin.Find(kind) is { } path ? PhotoSkin.Load(path) : null;
+                if (kind == PadView.PadKind.DualSense)
+                    _ctx.DualSenseSkin = skin;
+                else
+                    _ctx.XboxSkin = skin;
+            }
+            catch (Exception)
+            {
+                // Unreadable photo: fall back to the built-in drawing.
+            }
         }
-
-        _controller.Text = s.Device is { } d
-            ? $"{d.Name}  ·  {StatusView.Connection(d.Connection)}  ·  serial {d.Serial ?? "unknown"}"
-            : "Not connected";
-        _virtual.Text = s.Running && s.Status == BridgeStatus.Running
-            ? $"Xbox 360 controller plugged in{(s.VirtualSlot is int i ? $" (XInput slot {i + 1})" : "")}"
-            : "Not plugged in";
-        _profile.Text = active.ProcessName is null
-            ? "All games (global)"
-            : $"{active.Name}  ({ProfileSelector.NormalizeProcessName(active.ProcessName)}.exe)";
     }
 
-    public void SetPaused(bool paused) => _pause.Text = paused ? "Resume" : "Pause";
-
-    public void SetEnvironment(HidingView hiding, IReadOnlyList<string> conflicts)
+    Control BuildSidebar()
     {
-        if (_hiding.Text != hiding.Text)
+        var bar = new ClearPanel { Dock = DockStyle.Left, Width = 236, Padding = new Padding(10, 10, 10, 14) };
+        var logo = new Logo { Dock = DockStyle.Top, Height = 64 };
+
+        var pages = new (string Key, string Glyph, string Name, Page Page)[]
         {
-            _hiding.Text = hiding.Text;
-            int at = hiding.InstallLink ? hiding.Text.IndexOf("Install HidHide", StringComparison.Ordinal) : -1;
-            _hiding.LinkArea = at >= 0 ? new LinkArea(at, "Install HidHide".Length) : new LinkArea(0, 0);
+            ("home", Theme.Glyph.Home, "Home", new HomePage(_ctx)),
+            ("controller", Theme.Glyph.Controller, "My Controller", new ControllerPage(_ctx)),
+            ("profiles", Theme.Glyph.Profiles, "Profiles", new ProfilesPage(_ctx)),
+            ("mapping", Theme.Glyph.Mapping, "Button Mapping", new MappingPage(_ctx)),
+            ("sticks", Theme.Glyph.Sticks, "Sticks & Triggers", new SticksPage(_ctx)),
+            ("hide", Theme.Glyph.Hide, "Hide DualSense", new HidePage(_ctx)),
+            ("log", Theme.Glyph.Log, "Log", _log),
+        };
+        var settings = ("settings", Theme.Glyph.Settings, "Settings", (Page)new SettingsPage(_ctx));
+
+        var navs = new List<Control> { logo };
+        foreach (var (key, glyph, name, page) in pages)
+        {
+            if (key is "profiles" or "hide")
+                navs.Add(new Panel { Height = 10, BackColor = Color.Transparent });
+            navs.Add(AddPage(key, glyph, name, page));
         }
-        _hiding.ForeColor = hiding.Warn ? Theme.Warn : hiding.Good ? Theme.Good : Theme.Text;
-        _hideDualSense.Enabled = !hiding.InstallLink;
-
-        _others.Text = conflicts.Count == 0
-            ? "None detected"
-            : string.Join(", ", conflicts) + "  — these can also grab the DualSense and create a second controller.";
-        _others.ForeColor = conflicts.Count == 0 ? Theme.Text : Theme.Warn;
+        var settingsNav = AddPage(settings.Item1, settings.Item2, settings.Item3, settings.Item4);
+        settingsNav.Dock = DockStyle.Bottom;
+        bar.Controls.Add(settingsNav);
+        for (int i = navs.Count - 1; i >= 0; i--)
+        {
+            navs[i].Dock = DockStyle.Top;
+            bar.Controls.Add(navs[i]);
+        }
+        return bar;
     }
 
-    public void SetStartupOptions(bool withWindows, bool minimized, bool hideDualSense)
+    NavItem AddPage(string key, string glyph, string name, Page page)
     {
-        _loadingOptions = true;
-        _startWithWindows.Checked = withWindows;
-        _startMinimized.Checked = minimized;
-        _hideDualSense.Checked = hideDualSense;
-        _loadingOptions = false;
+        var nav = new NavItem(glyph, name);
+        nav.Click += (_, _) => ShowPage(key);
+        page.Visible = false;
+        _host.Controls.Add(page);
+        _pages[key] = (nav, page);
+        return nav;
     }
 
-    public void AppendLog(DateTime time, HostEventKind kind, string message)
+    public void ShowPage(string key)
     {
-        _logLines.Add($"{time:HH:mm:ss}  {kind,-7}  {message}");
-        if (_logLines.Count > MaxLogLines)
-            _logLines.RemoveRange(0, _logLines.Count - MaxLogLines);
-        _log.Lines = _logLines.ToArray();
-        _log.SelectionStart = _log.TextLength;
-        _log.ScrollToCaret();
+        if (!_pages.ContainsKey(key))
+            return;
+        _current = key;
+        foreach (var (k, (nav, page)) in _pages)
+        {
+            nav.Selected = k == key;
+            page.Visible = k == key;
+        }
+        var shown = _pages[key].Page;
+        _title.Text = shown.Title;
+        _subtitle.Text = shown.Subtitle;
+        shown.OnEnvironment(_ctx.Env);
+        shown.OnLive(_ctx.Live);
+        shown.OnActivated();
     }
+
+    public void UpdateLive(LiveView live)
+    {
+        _ctx.Live = live;
+        _chip.Update(live, _ctx.Env);
+        if (Visible && _pages.TryGetValue(_current, out var p))
+            p.Page.OnLive(live);
+    }
+
+    public void SetEnvironment(EnvView env)
+    {
+        _ctx.Env = env;
+        foreach (var (_, (_, page)) in _pages)
+            page.OnEnvironment(env);
+    }
+
+    public void SetPaused(bool paused) => _chip.SetPaused(paused);
+
+    public void AppendLog(DateTime time, HostEventKind kind, string message) => _log.Append(time, kind, message);
 
     public void CloseForReal()
     {
@@ -256,227 +243,123 @@ internal sealed class MainForm : Form
         base.OnFormClosing(e);
     }
 
-    // ---- layout ----
-
-    void AddPage(string title, Control page)
+    /// <summary>App mark + name at the top of the sidebar.</summary>
+    sealed class Logo : Control
     {
-        var button = new NavButton(title);
-        int index = _pages.Count;
-        button.Click += (_, _) => ShowPage(index);
-        page.Dock = DockStyle.Fill;
-        page.Visible = false;
-        _content.Controls.Add(page);
-        _nav.Controls.Add(button);
-        _pages.Add((button, page));
-    }
-
-    void ShowPage(int index)
-    {
-        for (int i = 0; i < _pages.Count; i++)
+        public Logo()
         {
-            _pages[i].Page.Visible = i == index;
-            ((NavButton)_pages[i].Button).Selected = i == index;
+            SetStyle(ControlStyles.SupportsTransparentBackColor | ControlStyles.UserPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+            BackColor = Color.Transparent;
         }
-    }
-
-    Control BuildHeader()
-    {
-        var header = new Panel { Dock = DockStyle.Top, Height = 118, BackColor = Theme.Card };
-
-        // GrowAndShrink: the default GrowOnly keeps the initial 100 px height, which covered the nav bar.
-        var text = new FlowLayoutPanel
-        {
-            FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
-            Location = new Point(50, 14), WrapContents = false, BackColor = Theme.Card,
-        };
-        text.Controls.Add(_status);
-        text.Controls.Add(_detail);
-        _dot.Location = new Point(22, 24);
-        header.Controls.Add(_dot);
-        header.Controls.Add(text);
-        header.Controls.Add(_pause);
-        header.Resize += (_, _) => _pause.Location = new Point(header.ClientSize.Width - _pause.Width - 20, 22);
-
-        header.Controls.Add(_nav);
-        _nav.BringToFront(); // never let the status text overlap the nav
-
-        var line = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Theme.Border };
-        header.Controls.Add(line);
-        return header;
-    }
-
-    Control BuildOverview()
-    {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Padding = new Padding(14), BackColor = Theme.Background };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // controllers take what the status card leaves
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-
-        root.Controls.Add(Card("Your DualSense", "What you press  ·  right-click to change picture", _dsView, new Padding(0, 0, 7, 7)), 0, 0);
-        root.Controls.Add(Card("Xbox controller", "What the game sees (Xbox 360)", _xbView, new Padding(7, 0, 0, 7)), 1, 0);
-
-        var info = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, BackColor = Theme.Card, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink };
-        info.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
-        info.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        int row = 0;
-        void AddRow(string label, Control value)
-        {
-            info.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-            info.Controls.Add(new Label { Text = label, AutoSize = true, ForeColor = Theme.Muted, Margin = new Padding(0, 5, 0, 5) }, 0, row);
-            value.Margin = new Padding(0, 5, 0, 5);
-            info.Controls.Add(value, 1, row);
-            row++;
-        }
-        AddRow("Controller", _controller);
-        AddRow("Virtual controller", _virtual);
-        AddRow("Active profile", _profile);
-        AddRow("Hide DualSense", _hiding);
-        AddRow("Other tools", _others);
-
-        var options = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 0), BackColor = Theme.Card };
-        options.Controls.Add(_hideDualSense);
-        options.Controls.Add(_startWithWindows);
-        options.Controls.Add(_startMinimized);
-        info.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        info.Controls.Add(options, 1, row);
-        info.RowCount = row + 1;
-
-        var card = Card("Status", null, info, new Padding(0, 7, 0, 0));
-        card.Dock = DockStyle.Top;
-        card.AutoSize = true;
-        card.AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        info.Dock = DockStyle.Top;
-        root.Controls.Add(card, 0, 1);
-        root.SetColumnSpan(card, 2);
-        return root;
-    }
-
-    Control BuildLog()
-    {
-        var root = new Panel { Dock = DockStyle.Fill, Padding = new Padding(14), BackColor = Theme.Background };
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, AutoSize = true, Padding = new Padding(0, 10, 0, 0), BackColor = Theme.Background };
-        var openLogs = Theme.MakeButton("Open log folder");
-        var openConfig = Theme.MakeButton("Open config.json");
-        openLogs.Click += (_, _) => _actions.OpenLogFolder();
-        openConfig.Click += (_, _) => _actions.OpenConfigFile();
-        buttons.Controls.Add(openLogs);
-        buttons.Controls.Add(openConfig);
-        var card = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Card, Padding = new Padding(12) };
-        card.Controls.Add(_log);
-        root.Controls.Add(card);
-        root.Controls.Add(buttons);
-        return root;
-    }
-
-    static Panel Card(string title, string? subtitle, Control content, Padding margin)
-    {
-        var card = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Card, Padding = new Padding(16, 12, 16, 12), Margin = margin };
-        var head = new FlowLayoutPanel { Dock = DockStyle.Top, Height = 30, WrapContents = false, BackColor = Theme.Card };
-        head.Controls.Add(Theme.Heading(title));
-        if (subtitle is not null)
-        {
-            var sub = Theme.Caption(subtitle);
-            sub.Padding = new Padding(4, 4, 0, 0);
-            head.Controls.Add(sub);
-        }
-        content.Dock = DockStyle.Fill;
-        content.BackColor = Theme.Card;
-        card.Controls.Add(content);
-        card.Controls.Add(head);
-        return card;
-    }
-
-    static Label Value() => new() { AutoSize = true, ForeColor = Theme.Text, MaximumSize = new Size(760, 0) };
-
-    static void OpenUrl(string url) =>
-        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose();
-
-    /// <summary>
-    /// Header navigation item, fully owner-drawn: text plus an accent underline when selected.
-    /// Size comes from the text measured at the current DPI, so it never clips.
-    /// </summary>
-    sealed class NavButton : Button
-    {
-        bool _selected;
-        bool _hover;
-
-        public NavButton(string text)
-        {
-            Text = text;
-            AccessibleName = text;
-            Font = new Font("Segoe UI Semibold", 10f);
-            AutoSize = true;
-            FlatStyle = FlatStyle.Flat;
-            FlatAppearance.BorderSize = 0;
-            BackColor = Theme.Card;
-            Cursor = Cursors.Hand;
-            Margin = new Padding(0, 0, 2, 0);
-            UseVisualStyleBackColor = false;
-            SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
-        }
-
-        public bool Selected
-        {
-            get => _selected;
-            set
-            {
-                _selected = value;
-                Invalidate();
-            }
-        }
-
-        public override Size GetPreferredSize(Size proposedSize)
-        {
-            var text = TextRenderer.MeasureText(Text, Font);
-            return new Size(text.Width + LogicalToDeviceUnits(28), text.Height + LogicalToDeviceUnits(18));
-        }
-
-        protected override void OnMouseEnter(EventArgs e) { _hover = true; Invalidate(); base.OnMouseEnter(e); }
-        protected override void OnMouseLeave(EventArgs e) { _hover = false; Invalidate(); base.OnMouseLeave(e); }
 
         protected override void OnPaint(PaintEventArgs e)
         {
             var g = e.Graphics;
-            using (var bg = new SolidBrush(_hover && !_selected ? Theme.Raised : Theme.Card))
-                g.FillRectangle(bg, ClientRectangle);
-            TextRenderer.DrawText(g, Text, Font, ClientRectangle, _selected ? Theme.Text : Theme.Muted,
-                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
-            if (_selected)
-            {
-                int pad = LogicalToDeviceUnits(10), thick = LogicalToDeviceUnits(3);
-                using var accent = new SolidBrush(Theme.Accent);
-                g.FillRectangle(accent, pad, Height - thick, Width - pad * 2, thick);
-            }
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            var mark = new RectangleF(LogicalToDeviceUnits(10), LogicalToDeviceUnits(14), LogicalToDeviceUnits(34), LogicalToDeviceUnits(34));
+            using (var path = Theme.RoundedRect(mark, LogicalToDeviceUnits(9)))
+            using (var fill = new LinearGradientBrush(mark, Theme.Accent, Color.FromArgb(0x6C, 0x5C, 0xFF), 45f))
+                g.FillPath(fill, path);
+            using (var icon = Theme.IconFont(13f))
+                TextRenderer.DrawText(g, Theme.Glyph.Controller, icon, Rectangle.Round(mark), Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            using var font = new Font("Segoe UI Semibold", 15f);
+            using var small = new Font("Segoe UI", 8f);
+            TextRenderer.DrawText(g, "Joyy", font, new Point((int)mark.Right + LogicalToDeviceUnits(10), LogicalToDeviceUnits(10)), Theme.Text);
+            TextRenderer.DrawText(g, "DualSense → Xbox 360", small, new Point((int)mark.Right + LogicalToDeviceUnits(12), LogicalToDeviceUnits(36)), Theme.Muted);
         }
     }
+}
 
-    /// <summary>The colored status circle in the header, with a soft halo.</summary>
-    sealed class Dot : Control
+/// <summary>
+/// Top-of-window controller chip (like DSX): status ring, controller name, profile and connection,
+/// and a power button that pauses/resumes the virtual controller.
+/// </summary>
+internal sealed class ControllerChip : RoundCard
+{
+    readonly RoundIconButton _power;
+    string _line1 = "No controller", _line2 = "";
+    Color _ring = Theme.Idle;
+
+    public ControllerChip(IAppActions actions)
     {
-        Color _color = Theme.Idle;
+        Size = new Size(470, 56);
+        Radius = 12;
+        _power = new RoundIconButton(Theme.Glyph.Power) { Size = new Size(34, 34), BackColor = Theme.Card };
+        _power.Click += (_, _) => actions.TogglePause();
+        Controls.Add(_power);
+        Layout += (_, _) => _power.Location = new Point(Width - _power.Width - LogicalToDeviceUnits(12), (Height - _power.Height) / 2);
+        SetPaused(false);
+    }
 
-        public Dot()
-        {
-            Size = new Size(20, 20);
-            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint, true);
-            BackColor = Theme.Card;
-        }
+    public void SetPaused(bool paused)
+    {
+        _power.Color = paused ? Theme.Good : Theme.Bad;
+        _power.AccessibleName = paused ? "Resume" : "Pause";
+        _power.Invalidate();
+    }
 
-        public Color Color
+    public void Update(LiveView live, EnvView env)
+    {
+        var s = live.Snapshot;
+        string l1 = s.Device?.Name ?? (live.HostRunning ? "Waiting for your DualSense" : "Paused");
+        var parts = new List<string> { ProfileSession.NameOf(live.Active) };
+        if (s.Device is { } d)
         {
-            get => _color;
-            set { _color = value; Invalidate(); }
+            parts.Add(StatusView.Connection(d.Connection));
+            if (d.Serial is { } serial)
+                parts.Add(serial);
         }
+        parts.Add(live.Status.Title);
+        string l2 = string.Join("  ·  ", parts);
+        if (l1 == _line1 && l2 == _line2 && _ring == live.Status.Color)
+            return;
+        (_line1, _line2, _ring) = (l1, l2, live.Status.Color);
+        Invalidate();
+    }
 
-        protected override void OnPaint(PaintEventArgs e)
-        {
-            e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-            e.Graphics.Clear(BackColor);
-            using var halo = new SolidBrush(Color.FromArgb(60, _color));
-            using var brush = new SolidBrush(_color);
-            e.Graphics.FillEllipse(halo, 0, 0, Width - 1, Height - 1);
-            e.Graphics.FillEllipse(brush, 4, 4, Width - 9, Height - 9);
-        }
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e);
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        float d = LogicalToDeviceUnits(38);
+        var ring = new RectangleF(LogicalToDeviceUnits(10), (Height - d) / 2, d, d);
+        using (var halo = new SolidBrush(Color.FromArgb(45, _ring)))
+            g.FillEllipse(halo, ring);
+        using (var pen = new Pen(_ring, 2.4f))
+            g.DrawEllipse(pen, RectangleF.Inflate(ring, -2, -2));
+        using (var icon = Theme.IconFont(12f))
+            TextRenderer.DrawText(g, Theme.Glyph.Controller, icon, Rectangle.Round(ring), Theme.Text, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+
+        int x = (int)ring.Right + LogicalToDeviceUnits(12);
+        int w = Width - x - LogicalToDeviceUnits(60);
+        using var name = new Font("Segoe UI Semibold", 9.75f);
+        using var small = new Font("Segoe UI", 8.25f);
+        TextRenderer.DrawText(g, _line1, name, new Rectangle(x, LogicalToDeviceUnits(9), w, LogicalToDeviceUnits(20)), Theme.Text, TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(g, _line2, small, new Rectangle(x, LogicalToDeviceUnits(29), w, LogicalToDeviceUnits(18)), Theme.Muted, TextFormatFlags.EndEllipsis);
+    }
+}
+
+/// <summary>Round icon button (the chip's power button).</summary>
+internal sealed class RoundIconButton : OwnerButton
+{
+    readonly string _glyph;
+
+    public RoundIconButton(string glyph)
+    {
+        _glyph = glyph;
+        AccessibleName = "Pause";
+    }
+
+    public Color Color { get; set; } = Theme.Bad;
+
+    protected override void Draw(Graphics g)
+    {
+        var r = new RectangleF(1, 1, Width - 3, Height - 3);
+        using (var fill = new SolidBrush(Hovered ? Color.FromArgb(60, Color) : Color.FromArgb(28, Color)))
+            g.FillEllipse(fill, r);
+        using (var pen = new Pen(Color.FromArgb(160, Color), 1.4f))
+            g.DrawEllipse(pen, r);
+        DrawGlyph(g, _glyph, ClientRectangle, Color, 10f);
     }
 }

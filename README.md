@@ -30,12 +30,22 @@ Requires the .NET 8 SDK and, at runtime, the ViGEmBus driver.
 
 Run `src\Joyy.App\bin\Release\net8.0-windows\win-x64\Joyy.exe` (after building).
 
-- **Overview**: status, plus live pictures of your DualSense and of the Xbox 360
-  controller games see. Press a button and watch both light up.
-- **Profiles**: deadzones, trigger curve, rumble strength, stick inversion,
-  Nintendo layout and per-button remapping. "Add game…" makes a profile that is
-  used automatically while that game's window is in front.
-- **Log**: what happened, with buttons to open the log folder and `config.json`.
+A DSX-style window: sidebar on the left, a controller chip at the top (with a
+power button that pauses/resumes the virtual controller), one page at a time.
+
+- **Home**: your DualSense live, Virtual device Off / Xbox 360, quick actions
+  (hide DualSense, active profile, test rumble) and shortcuts to every page.
+- **My Controller**: device information (type, connection, VID/PID, serial,
+  polling rate, virtual slot) and health checks for the drivers.
+- **Profiles**: "All games" plus one profile per game, used automatically while
+  that game's window is in front.
+- **Button Mapping**: switch the picture between PHYSICAL (DualSense) and VIRTUAL
+  (Xbox); click a button on the picture, or press it on the controller, then pick
+  what it sends. Nintendo layout toggle.
+- **Sticks & Triggers**: live stick circles with deadzone/full-tilt rings, trigger
+  meters, sliders, inversion, rumble strength and a test buzz.
+- **Hide DualSense**, **Log**, **Settings** (startup, controller pictures, files, about).
+- Edits stay pending until **Save**; **Revert** undoes them.
 - Closing the window keeps Joyy running in the tray; use the tray menu's **Exit** to quit.
 - Settings live in `%APPDATA%\Joyy\config.json` (hand edits are picked up live);
   logs in `%LOCALAPPDATA%\Joyy\logs`.

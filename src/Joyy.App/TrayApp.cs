@@ -51,8 +51,7 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
         _ = _form.Handle; // creates the window handle and installs the WinForms SynchronizationContext
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
         _form.HiddenToTray += OnHiddenToTray;
-        _form.Profiles.LoadConfig(_config);
-        _form.SetStartupOptions(StartupRegistration.IsEnabled, _config.StartMinimized, _config.HideDualSense);
+        _form.Session.Load(_config);
 
         if (HidHideCli.Locate() is { } hidHideCli)
             _hider = new DeviceHider(new HidHideCli(hidHideCli, m => _log.Write("HIDHIDE", m)),
@@ -107,6 +106,14 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
         QueueHiding(); // paused: give the DualSense back to games; resumed: hide it again
     }
 
+    public void SetVirtualDevice(bool on)
+    {
+        if (on != _host.IsRunning)
+            TogglePause();
+    }
+
+    public void TestRumble(double strength) => _host.PulseRumble(strength);
+
     public string? SaveProfiles(Profile global, IReadOnlyList<Profile> games) =>
         SaveConfig(_config with { Global = global, Games = games });
 
@@ -117,7 +124,7 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
             Report(HostEventKind.Error, $"Could not save setting: {error}");
             return;
         }
-        _form.SetStartupOptions(StartupRegistration.IsEnabled, _config.StartMinimized, _config.HideDualSense);
+        RefreshEnvironment();
         QueueHiding();
     }
 
@@ -143,6 +150,7 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
         {
             StartupRegistration.Set(enabled, Environment.ProcessPath ?? Application.ExecutablePath);
             Report(HostEventKind.Info, enabled ? "Joyy will start with Windows" : "Joyy will no longer start with Windows");
+            RefreshEnvironment();
         }
         catch (Exception ex)
         {
@@ -155,6 +163,7 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
         var updated = _config with { StartMinimized = enabled };
         if (SaveConfig(updated) is { } error)
             Report(HostEventKind.Error, $"Could not save setting: {error}");
+        RefreshEnvironment();
     }
 
     public void OpenLogFolder() => Launch("explorer.exe", $"\"{_log.Directory}\"");
@@ -176,7 +185,7 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
         var status = StatusView.From(snapshot, _host.IsRunning, _viGEmInstalled);
 
         if (_form.Visible)
-            _form.UpdateLive(snapshot, status, _host.ActiveProfile);
+            _form.UpdateLive(new LiveView(snapshot, status, _host.ActiveProfile, _host.IsRunning));
 
         if (_trayStatus != status)
         {
@@ -224,8 +233,8 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
     {
         bool hidingChanged = config.HideDualSense != _config.HideDualSense;
         _config = config;
-        _form.Profiles.ExternalReload(config);
-        _form.SetStartupOptions(StartupRegistration.IsEnabled, config.StartMinimized, config.HideDualSense);
+        _form.Session.ExternalReload(config);
+        RefreshEnvironment();
         ApplyProfile(force: true);
         if (hidingChanged)
             QueueHiding();
@@ -312,7 +321,9 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
                 Report(HostEventKind.Warning, $"{c} is running and may also use the DualSense (possible double controller)");
             _conflicts = conflicts;
         }
-        _form.SetEnvironment(DescribeHiding(), _conflicts);
+        _form.SetEnvironment(new EnvView(DescribeHiding(), _conflicts, _viGEmInstalled, _hider is not null,
+            _config.HideDualSense, _hidingActive && _host.IsRunning, _replugNeeded,
+            StartupRegistration.IsEnabled, _config.StartMinimized));
         _menuHide.Enabled = _hider is not null;
         _menuHide.Checked = _hider is not null && _config.HideDualSense;
     }

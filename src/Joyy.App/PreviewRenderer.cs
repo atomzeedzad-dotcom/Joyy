@@ -28,12 +28,12 @@ internal static class PreviewRenderer
         Render(Path.Combine(folder, "pads-rest.png"), PadState.Neutral, mapper.Map(PadState.Neutral));
         Render(Path.Combine(folder, "pads-pressed.png"), held, mapper.Map(held));
         Render(Path.Combine(folder, "pads-all.png"), everything, mapper.Map(everything));
-        RenderWindow(Path.Combine(folder, "window.png"));
+        RenderWindow(folder, held, mapper.Map(held));
         return 0;
     }
 
-    /// <summary>The whole main window, drawn offscreen (no bridge running).</summary>
-    static void RenderWindow(string path)
+    /// <summary>Every page of the main window, drawn offscreen with a sample connected controller.</summary>
+    static void RenderWindow(string folder, PadState input, X360Report output)
     {
         using var form = new MainForm(new NoActions())
         {
@@ -42,22 +42,40 @@ internal static class PreviewRenderer
             ShowInTaskbar = false,
         };
         _ = form.Handle; // same order as TrayApp: handle first, shown later
-        Application.DoEvents();
+        form.Session.Load(new AppConfig
+        {
+            Games = new[] { new Profile { Name = "FIFA 19", ProcessName = "FIFA19.exe", NintendoLayout = false } },
+        });
         form.Show();
-        Application.DoEvents();
-        using var bitmap = new Bitmap(form.Width, form.Height);
-        form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
-        bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
+
+        var device = new Joyy.Platform.PadInfo(1, "DualSense Wireless Controller", 0x054C, 0x0CE6, "48-18-8d-63-49-34", null, ConnectionKind.Usb);
+        var snapshot = new Joyy.Platform.BridgeSnapshot(true, Joyy.Platform.BridgeStatus.Running, null, device, 0, input, output, 498);
+        var status = StatusView.From(snapshot, true, true);
+        var env = new EnvView(new HidingView("On. Games see only the Xbox controller.", true, false, false),
+            new[] { "Steam (Steam Input)" }, true, true, true, true, false, false, false);
+        form.SetEnvironment(env);
+
+        foreach (var page in new[] { "home", "controller", "profiles", "mapping", "sticks", "hide", "log", "settings" })
+        {
+            form.ShowPage(page);
+            form.UpdateLive(new LiveView(snapshot, status, new Profile { Name = "Global" }, true));
+            Application.DoEvents();
+            using var bitmap = new Bitmap(form.Width, form.Height);
+            form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
+            bitmap.Save(Path.Combine(folder, $"window-{page}.png"), System.Drawing.Imaging.ImageFormat.Png);
+        }
         form.CloseForReal();
     }
 
     sealed class NoActions : IAppActions
     {
         public void TogglePause() { }
+        public void SetVirtualDevice(bool on) { }
         public string? SaveProfiles(Profile global, IReadOnlyList<Profile> games) => null;
         public void SetStartWithWindows(bool enabled) { }
         public void SetStartMinimized(bool enabled) { }
         public void SetHideDualSense(bool enabled) { }
+        public void TestRumble(double strength) { }
         public void OpenLogFolder() { }
         public void OpenConfigFile() { }
         public void Exit() { }

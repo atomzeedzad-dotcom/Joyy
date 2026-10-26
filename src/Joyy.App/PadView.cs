@@ -1,4 +1,4 @@
-using System.Drawing.Drawing2D;
+﻿using System.Drawing.Drawing2D;
 using System.Drawing.Text;
 using Joyy.Core;
 
@@ -49,36 +49,150 @@ internal sealed class PadView : Control
         new(182, 178), new(192, 178), new(200, 178),
     };
 
+    /// <summary>Where a button sits (center and radius) in photo-reference or design coordinates.</summary>
+    readonly record struct Spot(float X, float Y, float R);
+
+    // Positions on the 1600x1600 reference photos (see the note above DsRefW).
+    static readonly Dictionary<PhysicalButton, Spot> DsPhotoSpots = new()
+    {
+        [PhysicalButton.Cross] = new(1058, 758, 27), [PhysicalButton.Circle] = new(1117, 699, 27),
+        [PhysicalButton.Square] = new(998, 699, 27), [PhysicalButton.Triangle] = new(1058, 639, 27),
+        [PhysicalButton.L1] = new(550, 556, 40), [PhysicalButton.R1] = new(1060, 556, 40),
+        [PhysicalButton.L3] = new(675, 809, 52), [PhysicalButton.R3] = new(937, 809, 52),
+        [PhysicalButton.Options] = new(994, 605, 16), [PhysicalButton.Create] = new(614, 605, 16),
+        [PhysicalButton.PS] = new(805, 805, 30), [PhysicalButton.Touchpad] = new(803, 642, 70),
+        [PhysicalButton.Mute] = new(805, 853, 18),
+        [PhysicalButton.DpadUp] = new(551, 656, 25), [PhysicalButton.DpadDown] = new(551, 745, 25),
+        [PhysicalButton.DpadLeft] = new(505, 699, 25), [PhysicalButton.DpadRight] = new(597, 699, 25),
+    };
+
+    static readonly Dictionary<X360Buttons, Spot> XbPhotoSpots = new()
+    {
+        [X360Buttons.A] = new(1120, 692, 44), [X360Buttons.B] = new(1205, 607, 44),
+        [X360Buttons.X] = new(1034, 607, 44), [X360Buttons.Y] = new(1120, 524, 44),
+        [X360Buttons.LeftShoulder] = new(493, 384, 60), [X360Buttons.RightShoulder] = new(1122, 384, 60),
+        [X360Buttons.LeftThumb] = new(476, 610, 72), [X360Buttons.RightThumb] = new(960, 782, 72),
+        [X360Buttons.Start] = new(891, 606, 28), [X360Buttons.Back] = new(709, 606, 28),
+        [X360Buttons.Guide] = new(801, 479, 48),
+        [X360Buttons.DpadUp] = new(636, 743, 30), [X360Buttons.DpadDown] = new(636, 866, 30),
+        [X360Buttons.DpadLeft] = new(575, 803, 30), [X360Buttons.DpadRight] = new(698, 803, 30),
+    };
+
+    // Positions in the 400x270 design space of the built-in drawings.
+    static readonly Dictionary<PhysicalButton, Spot> DsDrawSpots = new()
+    {
+        [PhysicalButton.Cross] = new(314, 134, 12), [PhysicalButton.Circle] = new(336, 112, 12),
+        [PhysicalButton.Square] = new(292, 112, 12), [PhysicalButton.Triangle] = new(314, 90, 12),
+        [PhysicalButton.L1] = new(105, 50, 16), [PhysicalButton.R1] = new(295, 50, 16),
+        [PhysicalButton.L3] = new(152, 152, 20), [PhysicalButton.R3] = new(248, 152, 20),
+        [PhysicalButton.Options] = new(271, 70, 8), [PhysicalButton.Create] = new(129, 70, 8),
+        [PhysicalButton.PS] = new(200, 150, 10), [PhysicalButton.Touchpad] = new(200, 83, 26),
+        [PhysicalButton.Mute] = new(200, 171, 7),
+        [PhysicalButton.DpadUp] = new(86, 96, 10), [PhysicalButton.DpadDown] = new(86, 128, 10),
+        [PhysicalButton.DpadLeft] = new(70, 112, 10), [PhysicalButton.DpadRight] = new(102, 112, 10),
+    };
+
+    static readonly Dictionary<X360Buttons, Spot> XbDrawSpots = new()
+    {
+        [X360Buttons.A] = new(296, 130, 12), [X360Buttons.B] = new(318, 108, 12),
+        [X360Buttons.X] = new(274, 108, 12), [X360Buttons.Y] = new(296, 86, 12),
+        [X360Buttons.LeftShoulder] = new(106, 52, 16), [X360Buttons.RightShoulder] = new(294, 52, 16),
+        [X360Buttons.LeftThumb] = new(106, 108, 20), [X360Buttons.RightThumb] = new(248, 160, 20),
+        [X360Buttons.Start] = new(232, 104, 8), [X360Buttons.Back] = new(168, 104, 8),
+        [X360Buttons.Guide] = new(200, 100, 15),
+        [X360Buttons.DpadUp] = new(152, 148, 8), [X360Buttons.DpadDown] = new(152, 172, 8),
+        [X360Buttons.DpadLeft] = new(140, 160, 8), [X360Buttons.DpadRight] = new(164, 160, 8),
+    };
+
     PadState _ds;
     X360Report _xb;
     bool _active;
-    PhotoSkin? _skin;
+    PadKind _kind;
+    PhotoSkin? _dsSkin;
+    PhotoSkin? _xbSkin;
+    PhysicalButton? _highlight;
+    X360Buttons _highlightXbox;
 
-    /// <summary>A product photo to draw instead of the built-in artwork; null for the artwork.</summary>
-    public PhotoSkin? Skin
-    {
-        get => _skin;
-        set
-        {
-            _skin = value;
-            Invalidate();
-        }
-    }
+    Bitmap? _photoCache;
+    (int, int, PhotoSkin, Color) _photoCacheKey;
+
+    // How the last paint mapped spot coordinates to pixels (photo or design space).
+    Func<float, float, PointF> _mapPoint = (x, y) => new PointF(x, y);
+    Func<float, float> _mapRadius = r => r;
 
     public PadView(PadKind kind)
     {
-        Kind = kind;
+        _kind = kind;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint |
                  ControlStyles.UserPaint | ControlStyles.ResizeRedraw, true);
         BackColor = Theme.Card;
         MinimumSize = new Size(240, 160);
     }
 
-    public PadKind Kind { get; }
+    /// <summary>Which controller is shown: the physical DualSense or the virtual Xbox pad.</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public PadKind Kind
+    {
+        get => _kind;
+        set { _kind = value; Invalidate(); }
+    }
+
+    /// <summary>The product photo for the shown kind; null for the built-in artwork.</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public PhotoSkin? Skin
+    {
+        get => _kind == PadKind.DualSense ? _dsSkin : _xbSkin;
+        set => SetSkin(_kind, value);
+    }
+
+    public void SetSkin(PadKind kind, PhotoSkin? skin)
+    {
+        if (kind == PadKind.DualSense)
+            _dsSkin = skin;
+        else
+            _xbSkin = skin;
+        Invalidate();
+    }
+
+    public PhotoSkin? GetSkin(PadKind kind) => kind == PadKind.DualSense ? _dsSkin : _xbSkin;
+
+    /// <summary>Dims the picture with "No controller connected" while nothing is connected.</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool ShowDisconnectedVeil { get; set; } = true;
+
+    /// <summary>Lets the user click buttons on the picture (raises <see cref="PhysicalButtonClicked"/> / <see cref="XboxButtonClicked"/>).</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public bool Clickable { get; set; }
+
+    public event Action<PhysicalButton>? PhysicalButtonClicked;
+    public event Action<X360Buttons>? XboxButtonClicked;
+
+    /// <summary>Selection ring on a DualSense button (DualSense view).</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public PhysicalButton? Highlight
+    {
+        get => _highlight;
+        set { _highlight = value; Invalidate(); }
+    }
+
+    /// <summary>Selection rings on Xbox buttons (Xbox view).</summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public X360Buttons HighlightXbox
+    {
+        get => _highlightXbox;
+        set { _highlightXbox = value; Invalidate(); }
+    }
 
     public void SetState(in PadState physical, in X360Report xbox, bool active)
     {
         if (_active == active && _ds == physical && _xb == xbox)
+            return;
+        // Ignore stick jitter too small to see (< ~1% of travel) so a resting controller doesn't repaint constantly.
+        static bool Near(short a, short b) => Math.Abs(a - b) < 300;
+        if (_active == active && _ds.Buttons == physical.Buttons && _ds.L2 == physical.L2 && _ds.R2 == physical.R2 &&
+            _xb.Buttons == xbox.Buttons && _xb.LeftTrigger == xbox.LeftTrigger && _xb.RightTrigger == xbox.RightTrigger &&
+            Near(_ds.LeftX, physical.LeftX) && Near(_ds.LeftY, physical.LeftY) && Near(_ds.RightX, physical.RightX) && Near(_ds.RightY, physical.RightY) &&
+            Near(_xb.ThumbLX, xbox.ThumbLX) && Near(_xb.ThumbLY, xbox.ThumbLY) && Near(_xb.ThumbRX, xbox.ThumbRX) && Near(_xb.ThumbRY, xbox.ThumbRY))
             return;
         _ds = physical;
         _xb = xbox;
@@ -94,29 +208,116 @@ internal sealed class PadView : Control
         g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
         g.Clear(BackColor);
 
-        if (_skin is not null)
+        if (Skin is { } skin)
         {
-            DrawPhoto(g, _skin);
+            DrawPhoto(g, skin);
         }
         else
         {
             var state = g.Save();
             float s = Math.Min(Width / W, Height / H);
-            g.TranslateTransform((Width - W * s) / 2, (Height - H * s) / 2);
+            float ox = (Width - W * s) / 2, oy = (Height - H * s) / 2;
+            _mapPoint = (x, y) => new PointF(ox + x * s, oy + y * s);
+            _mapRadius = r => r * s;
+            g.TranslateTransform(ox, oy);
             g.ScaleTransform(s, s);
-            if (Kind == PadKind.DualSense)
+            if (_kind == PadKind.DualSense)
                 DrawDualSense(g);
             else
                 DrawXbox360(g);
             g.Restore(state);
         }
 
-        if (!_active)
+        if (!_active && ShowDisconnectedVeil)
         {
             using var veil = new SolidBrush(Color.FromArgb(200, BackColor));
             g.FillRectangle(veil, ClientRectangle);
             DrawCentered(g, "No controller connected", OverlayFont, Theme.Muted, new PointF(Width / 2f, Height / 2f));
         }
+
+        DrawSelection(g);
+    }
+
+    Dictionary<PhysicalButton, Spot> DsSpots => _dsSkin is not null ? DsPhotoSpots : DsDrawSpots;
+    Dictionary<X360Buttons, Spot> XbSpots => _xbSkin is not null ? XbPhotoSpots : XbDrawSpots;
+
+    void DrawSelection(Graphics g)
+    {
+        void Ring(Spot spot)
+        {
+            var c = _mapPoint(spot.X, spot.Y);
+            float r = Math.Max(_mapRadius(spot.R) * 1.3f, 9f);
+            using var glow = new Pen(Color.FromArgb(90, Theme.Accent), 6f);
+            using var pen = new Pen(Theme.Accent, 2.2f);
+            g.DrawEllipse(glow, c.X - r, c.Y - r, r * 2, r * 2);
+            g.DrawEllipse(pen, c.X - r, c.Y - r, r * 2, r * 2);
+        }
+
+        if (_kind == PadKind.DualSense && _highlight is { } b && DsSpots.TryGetValue(b, out var spot))
+            Ring(spot);
+        if (_kind == PadKind.Xbox && _highlightXbox != X360Buttons.None)
+        {
+            foreach (var (button, xs) in XbSpots)
+            {
+                if ((_highlightXbox & button) == button)
+                    Ring(xs);
+            }
+        }
+    }
+
+    /// <summary>The button under a point in the current view, if any.</summary>
+    public (PhysicalButton? Physical, X360Buttons Xbox) HitTest(Point p)
+    {
+        float best = float.MaxValue;
+        PhysicalButton? physical = null;
+        X360Buttons xbox = X360Buttons.None;
+
+        bool Inside(Spot s, out float d)
+        {
+            var c = _mapPoint(s.X, s.Y);
+            float r = Math.Max(_mapRadius(s.R) * 1.15f, 10f);
+            d = MathF.Sqrt((p.X - c.X) * (p.X - c.X) + (p.Y - c.Y) * (p.Y - c.Y));
+            return d <= r;
+        }
+
+        if (_kind == PadKind.DualSense)
+        {
+            foreach (var (button, spot) in DsSpots)
+            {
+                if (Inside(spot, out float d) && d < best) { best = d; physical = button; }
+            }
+        }
+        else
+        {
+            foreach (var (button, spot) in XbSpots)
+            {
+                if (Inside(spot, out float d) && d < best) { best = d; xbox = button; }
+            }
+        }
+        return (physical, xbox);
+    }
+
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        if (Clickable)
+        {
+            var (p, x) = HitTest(e.Location);
+            Cursor = p is not null || x != X360Buttons.None ? Cursors.Hand : Cursors.Default;
+        }
+        base.OnMouseMove(e);
+    }
+
+    protected override void OnMouseClick(MouseEventArgs e)
+    {
+        if (Clickable && e.Button == MouseButtons.Left)
+        {
+            var (p, x) = HitTest(e.Location);
+            if (p is { } physical)
+                PhysicalButtonClicked?.Invoke(physical);
+            else if (x != X360Buttons.None)
+                XboxButtonClicked?.Invoke(x);
+        }
+        base.OnMouseClick(e);
     }
 
     // ------------------------------------------------------------------ photo mode
@@ -138,19 +339,33 @@ internal sealed class PadView : Control
             area.Y + (area.Height - skin.Image.Height * scale) / 2,
             skin.Image.Width * scale, skin.Image.Height * scale);
 
-        // Soft light behind the controller so a black one still stands out on the dark theme.
-        using (var halo = new GraphicsPath())
+        // The halo and the bicubic-scaled photo only change with size or skin, so render them
+        // once into a cache; a frame then costs a single unscaled blit plus the highlights.
+        var key = (Width, Height, skin, BackColor);
+        if (_photoCache is null || _photoCacheKey != key)
         {
-            var light = RectangleF.Inflate(dest, dest.Width * 0.12f, dest.Height * 0.18f);
-            halo.AddEllipse(light);
-            using var brush = new PathGradientBrush(halo)
+            _photoCache?.Dispose();
+            _photoCache = new Bitmap(Math.Max(1, Width), Math.Max(1, Height));
+            using var cg = Graphics.FromImage(_photoCache);
+            cg.SmoothingMode = SmoothingMode.AntiAlias;
+            cg.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            cg.Clear(BackColor);
+            // Soft light behind the controller so a black one still stands out on the dark theme.
+            using (var halo = new GraphicsPath())
             {
-                CenterColor = Color.FromArgb(46, 0xA8, 0xB8, 0xD8),
-                SurroundColors = new[] { Color.FromArgb(0, 0xA8, 0xB8, 0xD8) },
-            };
-            g.FillPath(brush, halo);
+                var light = RectangleF.Inflate(dest, dest.Width * 0.12f, dest.Height * 0.18f);
+                halo.AddEllipse(light);
+                using var brush = new PathGradientBrush(halo)
+                {
+                    CenterColor = Color.FromArgb(46, 0xA8, 0xB8, 0xD8),
+                    SurroundColors = new[] { Color.FromArgb(0, 0xA8, 0xB8, 0xD8) },
+                };
+                cg.FillPath(brush, halo);
+            }
+            cg.DrawImage(skin.Image, dest);
+            _photoCacheKey = key;
         }
-        g.DrawImage(skin.Image, dest);
+        g.DrawImageUnscaled(_photoCache, 0, 0);
 
         bool ds = Kind == PadKind.DualSense;
         float refW = ds ? DsRefW : XbRefW, refH = ds ? DsRefH : XbRefH;
@@ -158,12 +373,14 @@ internal sealed class PadView : Control
             dest.X + (x / refW * skin.Source.Width - skin.Crop.X) * scale,
             dest.Y + (y / refH * skin.Source.Height - skin.Crop.Y) * scale);
         float R(float r) => r / refW * skin.Source.Width * scale;
+        _mapPoint = P;
+        _mapRadius = R;
         RectangleF Bar(float centerX) => new(P(centerX, 0).X - R(ds ? 80 : 110), band * 0.28f, R(ds ? 160 : 220), Math.Max(10, band * 0.42f));
 
         if (ds)
         {
             bool B(PhysicalButton b) => _ds.IsPressed(b);
-            var accent = Theme.Accent;
+            var accent = Theme.PsBlue;
             TriggerBar(g, Bar(550), "L2", _ds.L2, accent);
             TriggerBar(g, Bar(1060), "R2", _ds.R2, accent);
             if (B(PhysicalButton.L1)) GlowEllipse(g, P(550, 556), R(62), R(16), accent);
@@ -297,7 +514,7 @@ internal sealed class PadView : Control
     void DrawDualSense(Graphics g)
     {
         bool P(PhysicalButton b) => _ds.IsPressed(b);
-        var accent = Theme.Accent;
+        var accent = Theme.PsBlue;
         var dark = Color.FromArgb(0x1C, 0x1F, 0x25);
 
         Trigger(g, new RectangleF(76, 26, 60, 30), "L2", _ds.L2, dark, accent);

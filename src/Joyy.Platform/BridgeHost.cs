@@ -19,7 +19,8 @@ public readonly record struct BridgeSnapshot(
     PadInfo? Device,
     int? VirtualSlot,
     PadState Input,
-    X360Report Output);
+    X360Report Output,
+    double PollRate = 0);
 
 /// <summary>
 /// Runs the <see cref="Bridge"/> on its own input thread (SDL must be created, polled and
@@ -34,6 +35,7 @@ public sealed class BridgeHost : IDisposable
     CancellationTokenSource? _cancel;
     Mapper _mapper;
     volatile Bridge? _bridge;
+    volatile IPhysicalPad? _pad;
     BridgeSnapshot _snapshot;
 
     public BridgeHost(Profile profile, Func<IVirtualPad>? createVirtual = null)
@@ -61,6 +63,16 @@ public sealed class BridgeHost : IDisposable
         Volatile.Write(ref _mapper, mapper);
         if (_bridge is { } bridge)
             bridge.Mapper = mapper;
+    }
+
+    /// <summary>Buzzes the DualSense briefly so the user can feel the rumble strength. Thread-safe.</summary>
+    public void PulseRumble(double strength = 1.0, int milliseconds = 450)
+    {
+        if (_pad is not { } pad)
+            return;
+        ushort level = (ushort)Math.Clamp(Math.Round(40000 * strength), 0, ushort.MaxValue);
+        pad.SetRumble(level, level);
+        _ = Task.Delay(milliseconds).ContinueWith(_ => pad.SetRumble(0, 0), TaskScheduler.Default);
     }
 
     public void Start()
@@ -110,6 +122,7 @@ public sealed class BridgeHost : IDisposable
         finally
         {
             _bridge = null;
+            _pad = null;
             lock (_gate)
                 _snapshot = _snapshot with { Running = false, Device = null, VirtualSlot = null,
                     Input = PadState.Neutral, Output = X360Report.Neutral };
@@ -135,6 +148,7 @@ public sealed class BridgeHost : IDisposable
 
             using var bridge = new Bridge(pad, _createVirtual, Volatile.Read(ref _mapper));
             _bridge = bridge;
+            _pad = pad;
             bridge.Mapper = Volatile.Read(ref _mapper); // in case SetProfile raced the line above
 
             int? slot = null;
@@ -160,10 +174,21 @@ public sealed class BridgeHost : IDisposable
 
             long waitingSince = Environment.TickCount64;
             long nextPresenceCheck = waitingSince + (long)rescanDelay.TotalMilliseconds;
+            long rateWindowStart = waitingSince;
+            int ticksInWindow = 0;
+            double pollRate = 0;
 
             while (!cancel.IsCancellationRequested)
             {
                 bridge.Tick();
+
+                ticksInWindow++;
+                if (Environment.TickCount64 - rateWindowStart >= 1000)
+                {
+                    pollRate = ticksInWindow * 1000.0 / (Environment.TickCount64 - rateWindowStart);
+                    ticksInWindow = 0;
+                    rateWindowStart = Environment.TickCount64;
+                }
 
                 // Watchdog: no controller in SDL, but Windows has one -> start SDL fresh.
                 long now = Environment.TickCount64;
@@ -180,6 +205,7 @@ public sealed class BridgeHost : IDisposable
                     {
                         Raise(HostEventKind.Info, "A DualSense is plugged in but was not picked up; reconnecting");
                         rescanDelay = TimeSpan.FromTicks(Math.Min(rescanDelay.Ticks * 2, MaxRescanDelay.Ticks));
+                        _pad = null;
                         return true;
                     }
                 }
@@ -192,13 +218,14 @@ public sealed class BridgeHost : IDisposable
                 }
 
                 var snapshot = new BridgeSnapshot(true, bridge.Status, detailText, pad.Device, slot,
-                    bridge.LastInput, bridge.LastOutput);
+                    bridge.LastInput, bridge.LastOutput, pollRate);
                 lock (_gate)
                     _snapshot = snapshot;
 
                 Thread.Sleep(1);
             }
             _bridge = null;
+            _pad = null;
             return false;
         }
     }
