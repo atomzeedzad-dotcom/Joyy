@@ -17,6 +17,8 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{2B852901
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Joyy.Platform.Tests", "tests\Joyy.Platform.Tests\Joyy.Platform.Tests.csproj", "{99A4B390-D7BF-44E8-A529-9850B2A4FFAD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Joyy.App", "src\Joyy.App\Joyy.App.csproj", "{A4D26FCF-F15C-4A6E-B6C4-EC644CAB462F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -43,6 +45,10 @@ Global
 		{99A4B390-D7BF-44E8-A529-9850B2A4FFAD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{99A4B390-D7BF-44E8-A529-9850B2A4FFAD}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{99A4B390-D7BF-44E8-A529-9850B2A4FFAD}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A4D26FCF-F15C-4A6E-B6C4-EC644CAB462F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A4D26FCF-F15C-4A6E-B6C4-EC644CAB462F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A4D26FCF-F15C-4A6E-B6C4-EC644CAB462F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A4D26FCF-F15C-4A6E-B6C4-EC644CAB462F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -51,5 +57,6 @@ Global
 		{CCCBF78B-6D55-468A-AE99-573729FFC094} = {FBB8CF8C-D10A-42C2-9FCB-01F11D26EA32}
 		{82C373BB-298A-4613-8822-28BA7823703E} = {FBB8CF8C-D10A-42C2-9FCB-01F11D26EA32}
 		{99A4B390-D7BF-44E8-A529-9850B2A4FFAD} = {2B852901-F3CC-4539-9369-059716FF828F}
+		{A4D26FCF-F15C-4A6E-B6C4-EC644CAB462F} = {FBB8CF8C-D10A-42C2-9FCB-01F11D26EA32}
 	EndGlobalSection
 EndGlobal

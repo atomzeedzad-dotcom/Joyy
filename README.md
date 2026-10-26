@@ -15,7 +15,7 @@ Full specification: [PROMPT.md](PROMPT.md).
 | M3 Virtual Xbox 360 pad (ViGEm) | Done (`joyy-cli selftest` passes end to end) |
 | M4 Rumble | Done in software; felt-on-the-controller check pending |
 | M5 Hide the DualSense (HidHide) | Blocked: HidHide driver not installed |
-| M6 Tray app, settings, profiles | Not started |
+| M6 Tray app, settings, profiles | Done (restore-visibility item waits for M5) |
 | M7 Packaging | Not started |
 
 ## Building (developers)
@@ -25,6 +25,20 @@ Requires the .NET 8 SDK and, at runtime, the ViGEmBus driver.
 ```powershell
 .\tools\test.ps1
 ```
+
+## Using Joyy
+
+Run `src\Joyy.App\bin\Release\net8.0-windows\win-x64\Joyy.exe` (after building).
+
+- **Overview**: status, plus live pictures of your DualSense and of the Xbox 360
+  controller games see. Press a button and watch both light up.
+- **Profiles**: deadzones, trigger curve, rumble strength, stick inversion,
+  Nintendo layout and per-button remapping. "Add game…" makes a profile that is
+  used automatically while that game's window is in front.
+- **Log**: what happened, with buttons to open the log folder and `config.json`.
+- Closing the window keeps Joyy running in the tray; use the tray menu's **Exit** to quit.
+- Settings live in `%APPDATA%\Joyy\config.json` (hand edits are picked up live);
+  logs in `%LOCALAPPDATA%\Joyy\logs`.
 
 ## Developer CLI (`joyy-cli`)
 
@@ -46,5 +60,6 @@ imperceptible priming report to avoid phantom stick drift. `selftest` checks thi
 
 - `src/Joyy.Core` — pure mapping logic (no hardware, no UI).
 - `src/Joyy.Platform` — SDL2 input, ViGEm output, the `Bridge` loop.
+- `src/Joyy.App` — the tray app (WinForms).
 - `src/Joyy.Cli` — developer/diagnostic console.
 - `tests/` — xUnit tests (Core logic, Bridge against fakes).
