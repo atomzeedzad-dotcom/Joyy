@@ -98,6 +98,35 @@ public sealed class BridgeHost : IDisposable
         try
         {
             using var timer = new TimerResolution(1);
+            var rescanDelay = MinRescanDelay;
+            bool first = true;
+            while (!cancel.IsCancellationRequested && RunSession(cancel, first, ref rescanDelay))
+                first = false; // the watchdog asked for a fresh SDL; go round again
+        }
+        catch (Exception ex)
+        {
+            Raise(HostEventKind.Error, $"Input loop failed: {ex.GetType().Name}: {ex.Message}");
+        }
+        finally
+        {
+            _bridge = null;
+            lock (_gate)
+                _snapshot = _snapshot with { Running = false, Device = null, VirtualSlot = null,
+                    Input = PadState.Neutral, Output = X360Report.Neutral };
+            Raise(HostEventKind.Info, "Stopped; virtual controller unplugged");
+        }
+    }
+
+    static readonly TimeSpan MinRescanDelay = TimeSpan.FromSeconds(3);
+    static readonly TimeSpan MaxRescanDelay = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// One SDL lifetime. Returns true when SDL should be restarted: Windows reports a DualSense
+    /// but SDL has not picked it up (seen after a replug while HidHide hides the device).
+    /// </summary>
+    bool RunSession(CancellationToken cancel, bool first, ref TimeSpan rescanDelay)
+    {
+        {
             using var pad = new SdlPad();
             pad.Connected += d => Raise(HostEventKind.Info,
                 $"DualSense connected via {(d.Connection == ConnectionKind.Usb ? "USB" : d.Connection.ToString())} (serial {d.Serial ?? "unknown"})");
@@ -126,11 +155,34 @@ public sealed class BridgeHost : IDisposable
                 StatusChanged?.Invoke(status, detail);
             };
 
-            Raise(HostEventKind.Info, $"Started (SDL {SdlPad.NativeVersion})");
+            if (first)
+                Raise(HostEventKind.Info, $"Started (SDL {SdlPad.NativeVersion})");
+
+            long waitingSince = Environment.TickCount64;
+            long nextPresenceCheck = waitingSince + (long)rescanDelay.TotalMilliseconds;
 
             while (!cancel.IsCancellationRequested)
             {
                 bridge.Tick();
+
+                // Watchdog: no controller in SDL, but Windows has one -> start SDL fresh.
+                long now = Environment.TickCount64;
+                if (pad.Device is not null)
+                {
+                    waitingSince = now;
+                    nextPresenceCheck = now + (long)MinRescanDelay.TotalMilliseconds;
+                    rescanDelay = MinRescanDelay;
+                }
+                else if (now >= nextPresenceCheck)
+                {
+                    nextPresenceCheck = now + (long)rescanDelay.TotalMilliseconds;
+                    if (DevicePresence.AnyDualSensePresent())
+                    {
+                        Raise(HostEventKind.Info, "A DualSense is plugged in but was not picked up; reconnecting");
+                        rescanDelay = TimeSpan.FromTicks(Math.Min(rescanDelay.Ticks * 2, MaxRescanDelay.Ticks));
+                        return true;
+                    }
+                }
 
                 // UserIndex is a driver round-trip; ask about once a second until known.
                 if (slot is null && bridge.VirtualPad is { } v && Environment.TickCount64 >= nextSlotQuery)
@@ -146,18 +198,8 @@ public sealed class BridgeHost : IDisposable
 
                 Thread.Sleep(1);
             }
-        }
-        catch (Exception ex)
-        {
-            Raise(HostEventKind.Error, $"Input loop failed: {ex.GetType().Name}: {ex.Message}");
-        }
-        finally
-        {
             _bridge = null;
-            lock (_gate)
-                _snapshot = _snapshot with { Running = false, Device = null, VirtualSlot = null,
-                    Input = PadState.Neutral, Output = X360Report.Neutral };
-            Raise(HostEventKind.Info, "Stopped; virtual controller unplugged");
+            return false;
         }
     }
 
