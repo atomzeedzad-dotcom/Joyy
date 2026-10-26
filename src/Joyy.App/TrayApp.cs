@@ -326,7 +326,7 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
 
     ContextMenuStrip BuildMenu()
     {
-        var menu = new ContextMenuStrip();
+        var menu = new ContextMenuStrip { Renderer = new Theme.MenuRenderer(), BackColor = Theme.Card, ForeColor = Theme.Text };
         menu.Items.Add(_menuStatus);
         menu.Items.Add(_menuProfile);
         menu.Items.Add(new ToolStripSeparator());

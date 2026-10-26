@@ -6,8 +6,8 @@ namespace Joyy.App;
 /// <summary>Pick a running game (or type its .exe name) for a new per-game profile.</summary>
 internal sealed class AddGameDialog : Form
 {
-    readonly ComboBox _process = new() { Width = 300, DropDownStyle = ComboBoxStyle.DropDown };
-    readonly TextBox _name = new() { Width = 300 };
+    readonly ComboBox _process = new() { Width = 320, DropDownStyle = ComboBoxStyle.DropDown };
+    readonly TextBox _name = new() { Width = 320 };
 
     public AddGameDialog()
     {
@@ -18,16 +18,21 @@ internal sealed class AddGameDialog : Form
         StartPosition = FormStartPosition.CenterParent;
         AutoSize = true;
         AutoSizeMode = AutoSizeMode.GrowAndShrink;
-        Padding = new Padding(14);
+        Padding = new Padding(16);
         BackColor = Theme.Card;
+        ForeColor = Theme.Text;
+        Theme.Input(_process);
+        Theme.Input(_name);
 
         foreach (var name in RunningWindowedProcesses())
             _process.Items.Add(name);
         _process.TextChanged += (_, _) => { if (_name.Tag is null) _name.Text = ProcessName; };
         _name.TextChanged += (_, _) => { if (_name.Focused) _name.Tag = "edited"; };
 
-        var ok = new Button { Text = "Add", DialogResult = DialogResult.OK, AutoSize = true };
-        var cancel = new Button { Text = "Cancel", DialogResult = DialogResult.Cancel, AutoSize = true };
+        var ok = Theme.MakeButton("Add", primary: true);
+        ok.DialogResult = DialogResult.OK;
+        var cancel = Theme.MakeButton("Cancel");
+        cancel.DialogResult = DialogResult.Cancel;
         ok.Click += (_, e) =>
         {
             if (ProcessName.Length == 0)
@@ -40,20 +45,28 @@ internal sealed class AddGameDialog : Form
         CancelButton = cancel;
 
         var layout = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, WrapContents = false };
-        layout.Controls.Add(new Label { Text = "Game program (.exe)", AutoSize = true, Font = new Font(Font, FontStyle.Bold) });
+        layout.Controls.Add(Theme.Heading("Game program (.exe)", 10f));
         layout.Controls.Add(new Label
         {
             Text = "Start the game first to pick it from the list, or type its .exe name.",
-            AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(300, 0),
+            AutoSize = true, ForeColor = Theme.Muted, MaximumSize = new Size(320, 0),
         });
         layout.Controls.Add(_process);
-        layout.Controls.Add(new Label { Text = "Profile name", AutoSize = true, Font = new Font(Font, FontStyle.Bold), Margin = new Padding(3, 10, 3, 3) });
+        var nameHeading = Theme.Heading("Profile name", 10f);
+        nameHeading.Margin = new Padding(3, 12, 3, 3);
+        layout.Controls.Add(nameHeading);
         layout.Controls.Add(_name);
         var buttons = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 12, 0, 0) };
         buttons.Controls.Add(ok);
         buttons.Controls.Add(cancel);
         layout.Controls.Add(buttons);
         Controls.Add(layout);
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        Theme.DarkTitleBar(this);
     }
 
     public string ProcessName => ProfileSelector.NormalizeProcessName(_process.Text);

@@ -39,10 +39,14 @@ internal sealed class ProfileEditor : UserControl
     bool _loading;
     bool _dirty;
 
-    readonly ListBox _list = new() { Dock = DockStyle.Fill, IntegralHeight = false, BorderStyle = BorderStyle.None };
-    readonly Button _add = new() { Text = "Add game…", AutoSize = true };
-    readonly Button _remove = new() { Text = "Remove", AutoSize = true };
-    readonly Label _title = new() { AutoSize = true, Font = new Font("Segoe UI", 12f, FontStyle.Bold), ForeColor = Theme.Text };
+    readonly ListBox _list = new()
+    {
+        Dock = DockStyle.Fill, IntegralHeight = false, BorderStyle = BorderStyle.None,
+        BackColor = Theme.Card, ForeColor = Theme.Text, DrawMode = DrawMode.OwnerDrawFixed, ItemHeight = 32,
+    };
+    readonly Button _add = Theme.MakeButton("Add game…");
+    readonly Button _remove = Theme.MakeButton("Remove");
+    readonly Label _title = new() { AutoSize = true, Font = new Font("Segoe UI Semibold", 13f), ForeColor = Theme.Text };
     readonly Label _subtitle = new() { AutoSize = true, ForeColor = Theme.Muted };
     readonly NumericUpDown _deadzone = Number(0, 90, 1, 0);
     readonly NumericUpDown _saturation = Number(10, 100, 1, 0);
@@ -51,11 +55,11 @@ internal sealed class ProfileEditor : UserControl
     readonly NumericUpDown _rumble = Number(0, 200, 10, 0);
     readonly CheckBox _invLX = Check("Invert left X"), _invLY = Check("Invert left Y");
     readonly CheckBox _invRX = Check("Invert right X"), _invRY = Check("Invert right Y");
-    readonly CheckBox _nintendo = Check("Nintendo layout (swap A/B and X/Y)");
+    readonly CheckBox _nintendo = Theme.MakeCheckBox("Nintendo layout (swap A/B and X/Y)");
     readonly DataGridView _grid = new();
-    readonly Button _saveButton = new() { Text = "Save", AutoSize = true };
-    readonly Button _revert = new() { Text = "Revert", AutoSize = true };
-    readonly Button _reset = new() { Text = "Reset this profile to defaults", AutoSize = true };
+    readonly Button _saveButton = Theme.MakeButton("Save", primary: true);
+    readonly Button _revert = Theme.MakeButton("Revert");
+    readonly Button _reset = Theme.MakeButton("Reset this profile to defaults");
     readonly Label _message = new() { AutoSize = true, ForeColor = Theme.Bad, Padding = new Padding(8, 6, 0, 0) };
 
     public ProfileEditor(Func<Profile, IReadOnlyList<Profile>, string?> save)
@@ -71,6 +75,8 @@ internal sealed class ProfileEditor : UserControl
         root.Controls.Add(BuildEditor(), 1, 0);
         Controls.Add(root);
 
+        _list.DrawItem += DrawListItem;
+        Theme.DarkScrollbars(_list);
         _list.SelectedIndexChanged += (_, _) =>
         {
             if (!_loading && _list.SelectedIndex >= 0)
@@ -118,16 +124,42 @@ internal sealed class ProfileEditor : UserControl
         LoadConfig(config);
     }
 
+    void DrawListItem(object? sender, DrawItemEventArgs e)
+    {
+        if (e.Index < 0)
+            return;
+        bool selected = (e.State & DrawItemState.Selected) != 0;
+        var g = e.Graphics;
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        using (var bg = new SolidBrush(Theme.Card))
+            g.FillRectangle(bg, e.Bounds);
+        if (selected)
+        {
+            var r = new RectangleF(e.Bounds.X + 2, e.Bounds.Y + 2, e.Bounds.Width - 4, e.Bounds.Height - 4);
+            using var path = Theme.RoundedRect(r, 6);
+            using var sel = new SolidBrush(Theme.Hover);
+            using var bar = new SolidBrush(Theme.Accent);
+            g.FillPath(sel, path);
+            g.FillRectangle(bar, r.X, r.Y + 6, 3, r.Height - 12);
+        }
+        TextRenderer.DrawText(g, _list.Items[e.Index]?.ToString(), _list.Font,
+            new Rectangle(e.Bounds.X + 12, e.Bounds.Y, e.Bounds.Width - 14, e.Bounds.Height),
+            selected ? Theme.Text : Theme.Muted, TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+    }
+
     Control BuildList()
     {
-        var card = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Card, Padding = new Padding(8), Margin = new Padding(0, 0, 12, 0) };
-        var header = new Label { Text = "Profiles", Dock = DockStyle.Top, Height = 26, Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = Theme.Text };
+        var card = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Card, Padding = new Padding(10), Margin = new Padding(0, 0, 14, 0) };
+        var header = Theme.Heading("Profiles");
+        header.AutoSize = false;
+        header.Dock = DockStyle.Top;
+        header.Height = 30;
         var hint = new Label
         {
             Text = "A game profile is used automatically while that game's window is in front.",
             Dock = DockStyle.Bottom, Height = 48, ForeColor = Theme.Muted,
         };
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 36, FlowDirection = FlowDirection.LeftToRight };
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Bottom, Height = 40, FlowDirection = FlowDirection.LeftToRight, BackColor = Theme.Card };
         buttons.Controls.Add(_add);
         buttons.Controls.Add(_remove);
         card.Controls.Add(_list);
@@ -139,8 +171,8 @@ internal sealed class ProfileEditor : UserControl
 
     Control BuildEditor()
     {
-        var card = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Card, Padding = new Padding(14, 10, 14, 10) };
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5 };
+        var card = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Card, Padding = new Padding(16, 12, 16, 12) };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 5, BackColor = Theme.Card };
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -152,13 +184,13 @@ internal sealed class ProfileEditor : UserControl
         titles.Controls.Add(_subtitle);
         layout.Controls.Add(titles, 0, 0);
 
-        var inverts = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Margin = new Padding(0, 2, 0, 0) };
+        var inverts = new TableLayoutPanel { AutoSize = true, ColumnCount = 2, Margin = new Padding(0, 2, 0, 0), BackColor = Theme.Raised };
         inverts.Controls.Add(_invLX, 0, 0);
         inverts.Controls.Add(_invRX, 1, 0);
         inverts.Controls.Add(_invLY, 0, 1);
         inverts.Controls.Add(_invRY, 1, 1);
 
-        var groups = new FlowLayoutPanel { AutoSize = true, WrapContents = true, Dock = DockStyle.Fill };
+        var groups = new FlowLayoutPanel { AutoSize = true, WrapContents = true, Dock = DockStyle.Fill, BackColor = Theme.Card };
         groups.Controls.Add(Group("Sticks",
             Row("Deadzone (%)", _deadzone),
             Row("Full tilt at (%)", _saturation),
@@ -169,15 +201,17 @@ internal sealed class ProfileEditor : UserControl
             Row("Rumble strength (%)", _rumble)));
         layout.Controls.Add(groups, 0, 1);
 
-        var buttonsHeader = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 4) };
-        buttonsHeader.Controls.Add(new Label { Text = "Buttons", AutoSize = true, Font = new Font("Segoe UI", 10f, FontStyle.Bold), ForeColor = Theme.Text, Padding = new Padding(0, 4, 16, 0) });
+        var buttonsHeader = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 10, 0, 6), BackColor = Theme.Card };
+        var buttonsTitle = Theme.Heading("Buttons");
+        buttonsTitle.Padding = new Padding(0, 3, 16, 0);
+        buttonsHeader.Controls.Add(buttonsTitle);
         buttonsHeader.Controls.Add(_nintendo);
         layout.Controls.Add(buttonsHeader, 0, 2);
 
         SetupGrid();
         layout.Controls.Add(_grid, 0, 3);
 
-        var actions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 8, 0, 0) };
+        var actions = new FlowLayoutPanel { AutoSize = true, Dock = DockStyle.Fill, Margin = new Padding(0, 10, 0, 0), BackColor = Theme.Card };
         actions.Controls.Add(_saveButton);
         actions.Controls.Add(_revert);
         actions.Controls.Add(_reset);
@@ -197,12 +231,43 @@ internal sealed class ProfileEditor : UserControl
         _grid.RowHeadersVisible = false;
         _grid.BackgroundColor = Theme.Card;
         _grid.BorderStyle = BorderStyle.None;
+        _grid.GridColor = Theme.Border;
+        _grid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
+        _grid.EnableHeadersVisualStyles = false;
+        _grid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
+        _grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Theme.Raised, ForeColor = Theme.Muted, SelectionBackColor = Theme.Raised,
+            SelectionForeColor = Theme.Muted, Padding = new Padding(6, 6, 6, 6),
+            Font = new Font("Segoe UI Semibold", 9f),
+        };
+        _grid.DefaultCellStyle = new DataGridViewCellStyle
+        {
+            BackColor = Theme.Card, ForeColor = Theme.Text, SelectionBackColor = Theme.Hover,
+            SelectionForeColor = Theme.Text, Padding = new Padding(6, 0, 6, 0),
+        };
+        _grid.RowTemplate.Height = 30;
+        _grid.EditingControlShowing += (_, e) =>
+        {
+            if (e.Control is ComboBox combo)
+            {
+                combo.BackColor = Theme.Raised;
+                combo.ForeColor = Theme.Text;
+                combo.FlatStyle = FlatStyle.Flat;
+            }
+        };
+        Theme.DarkScrollbars(_grid);
         _grid.SelectionMode = DataGridViewSelectionMode.CellSelect;
         _grid.EditMode = DataGridViewEditMode.EditOnEnter;
         _grid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _grid.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
         _grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText = "DualSense button", ReadOnly = true, FillWeight = 45 });
-        _grid.Columns.Add(new DataGridViewComboBoxColumn { HeaderText = "Game sees (Xbox 360)", FillWeight = 55, FlatStyle = FlatStyle.Flat });
+        _grid.Columns.Add(new DataGridViewComboBoxColumn
+        {
+            HeaderText = "Game sees (Xbox 360)", FillWeight = 55, FlatStyle = FlatStyle.Flat,
+            DisplayStyle = DataGridViewComboBoxDisplayStyle.Nothing,
+            DefaultCellStyle = new DataGridViewCellStyle { BackColor = Theme.Card, ForeColor = Theme.Text, SelectionBackColor = Theme.Hover, SelectionForeColor = Theme.Text },
+        });
         _grid.CurrentCellDirtyStateChanged += (_, _) =>
         {
             if (_grid.IsCurrentCellDirty)
@@ -404,27 +469,59 @@ internal sealed class ProfileEditor : UserControl
 
     static decimal Clamp(NumericUpDown n, decimal v) => Math.Clamp(Math.Round(v, n.DecimalPlaces), n.Minimum, n.Maximum);
 
-    static NumericUpDown Number(decimal min, decimal max, decimal step, int decimals) => new()
+    static NumericUpDown Number(decimal min, decimal max, decimal step, int decimals)
     {
-        Minimum = min, Maximum = max, Increment = step, DecimalPlaces = decimals, Width = 70,
-    };
+        var n = new NumericUpDown { Minimum = min, Maximum = max, Increment = step, DecimalPlaces = decimals, Width = 70 };
+        Theme.Input(n);
+        return n;
+    }
 
-    static CheckBox Check(string text) => new() { Text = text, AutoSize = true, Margin = new Padding(3, 4, 3, 2) };
+    static CheckBox Check(string text)
+    {
+        var c = Theme.MakeCheckBox(text);
+        c.BackColor = Theme.Raised;
+        return c;
+    }
 
     static Control Row(string label, Control input)
     {
-        var row = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 2, 0, 2) };
+        var row = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 2, 0, 2), BackColor = Theme.Raised };
         row.Controls.Add(new Label { Text = label, Width = 130, Padding = new Padding(0, 5, 0, 0), ForeColor = Theme.Text });
         row.Controls.Add(input);
         return row;
     }
 
+    /// <summary>A rounded section with a small uppercase title (replaces the light GroupBox).</summary>
     static Control Group(string title, params Control[] children)
     {
-        var box = new GroupBox { Text = title, AutoSize = true, Padding = new Padding(10, 6, 10, 6), Margin = new Padding(0, 0, 12, 6), ForeColor = Theme.Text };
-        var stack = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, Dock = DockStyle.Fill, WrapContents = false };
+        var box = new Section { Padding = new Padding(14, 10, 14, 10), Margin = new Padding(0, 0, 12, 8) };
+        var stack = new FlowLayoutPanel { AutoSize = true, FlowDirection = FlowDirection.TopDown, WrapContents = false, BackColor = Theme.Raised, Dock = DockStyle.Fill };
+        var heading = new Label
+        {
+            Text = title.ToUpperInvariant(), AutoSize = true, ForeColor = Theme.Muted,
+            Font = new Font("Segoe UI Semibold", 8f), Margin = new Padding(0, 0, 0, 6),
+        };
+        stack.Controls.Add(heading);
         stack.Controls.AddRange(children);
         box.Controls.Add(stack);
         return box;
+    }
+
+    sealed class Section : Panel
+    {
+        public Section()
+        {
+            AutoSize = true;
+            AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            BackColor = Theme.Raised;
+            SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            using var pen = new Pen(Theme.Border);
+            e.Graphics.DrawRectangle(pen, 0, 0, Width - 1, Height - 1);
+        }
     }
 }

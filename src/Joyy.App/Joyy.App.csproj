@@ -5,6 +5,8 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
+    <!-- WPF's imaging (WIC) decodes WebP/JPEG/PNG controller photos; no WPF windows are used. -->
+    <UseWPF>true</UseWPF>
     <RootNamespace>Joyy.App</RootNamespace>
     <AssemblyName>Joyy</AssemblyName>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
@@ -14,6 +16,11 @@
     <ApplicationVisualStyles>true</ApplicationVisualStyles>
     <ApplicationDefaultFont>Segoe UI, 9pt</ApplicationDefaultFont>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- UseWPF drops System.IO from implicit usings (WPF has its own Path type); we only use WPF imaging. -->
+    <Using Include="System.IO" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Joyy.Platform\Joyy.Platform.csproj" />

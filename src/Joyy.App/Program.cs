@@ -7,6 +7,11 @@ internal static class Program
     {
         if (args.Any(a => string.Equals(a, "--restore", StringComparison.OrdinalIgnoreCase)))
             return RestoreVisibility();
+        if (args.Length == 2 && string.Equals(args[0], "--render-preview", StringComparison.OrdinalIgnoreCase))
+        {
+            ApplicationConfiguration.Initialize();
+            return PreviewRenderer.Run(args[1]);
+        }
 
         // One Joyy per user session. A second launch just asks the first to show its window.
         using var instance = new Mutex(true, @"Local\Joyy.App.SingleInstance", out bool first);
