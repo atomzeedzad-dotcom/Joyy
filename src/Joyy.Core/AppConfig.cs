@@ -17,6 +17,9 @@ public sealed record AppConfig
     /// <summary>Start hidden in the tray instead of showing the window.</summary>
     public bool StartMinimized { get; init; }
 
+    /// <summary>Hide the physical DualSense from games (via HidHide) while Joyy runs.</summary>
+    public bool HideDualSense { get; init; } = true;
+
     /// <summary>Throws <see cref="ArgumentOutOfRangeException"/> or <see cref="FormatException"/> if any profile is invalid.</summary>
     public void Validate()
     {

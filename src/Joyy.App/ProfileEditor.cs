@@ -32,7 +32,7 @@ internal sealed class ProfileEditor : UserControl
         [PhysicalButton.DpadLeft] = "D-pad Left", [PhysicalButton.DpadRight] = "D-pad Right",
     };
 
-    readonly Func<AppConfig, string?> _save;
+    readonly Func<Profile, IReadOnlyList<Profile>, string?> _save;
     readonly List<Profile> _profiles = new(); // [0] is the global profile
     AppConfig _saved = new();
     int _current;
@@ -58,7 +58,7 @@ internal sealed class ProfileEditor : UserControl
     readonly Button _reset = new() { Text = "Reset this profile to defaults", AutoSize = true };
     readonly Label _message = new() { AutoSize = true, ForeColor = Theme.Bad, Padding = new Padding(8, 6, 0, 0) };
 
-    public ProfileEditor(Func<AppConfig, string?> save)
+    public ProfileEditor(Func<Profile, IReadOnlyList<Profile>, string?> save)
     {
         _save = save;
         BackColor = Theme.Background;
@@ -331,7 +331,7 @@ internal sealed class ProfileEditor : UserControl
     void Save()
     {
         var config = _saved with { Global = _profiles[0], Games = _profiles.Skip(1).ToList() };
-        string? error = _save(config);
+        string? error = _save(config.Global, config.Games);
         if (error is not null)
         {
             _message.ForeColor = Theme.Bad;

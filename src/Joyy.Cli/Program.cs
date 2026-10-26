@@ -12,6 +12,8 @@ switch (command)
         return SelfTest.Run(withSdl: args.Contains("--with-sdl"));
     case "xinput":
         return XInputCommand.Run(args.Skip(1).ToArray());
+    case "hide" or "restore" or "hidestatus":
+        return HideCommands.Run(command);
     case "-h" or "--help" or "help":
         PrintUsage();
         return 0;
@@ -39,5 +41,9 @@ static void PrintUsage()
 
         joyy-cli xinput [--rumble]
             List controllers as an XInput game sees them; --rumble pulses the first one.
+
+        joyy-cli hide | restore | hidestatus
+            Hide the DualSense from other programs with HidHide, undo it, or show the state.
+            "restore" is the emergency fix if the controller ever stays invisible.
         """);
 }

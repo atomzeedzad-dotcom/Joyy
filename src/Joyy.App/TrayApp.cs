@@ -22,12 +22,19 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
     readonly ToolStripMenuItem _menuStatus = new() { Enabled = false };
     readonly ToolStripMenuItem _menuProfile = new() { Enabled = false };
     readonly ToolStripMenuItem _menuPause = new("Pause");
+    readonly ToolStripMenuItem _menuHide = new("Hide DualSense from games") { CheckOnClick = false };
+    readonly DeviceHider? _hider;
+    readonly object _hidingGate = new();
+    Task _hidingWork = Task.CompletedTask;
+    volatile string? _hidingError;
+    volatile bool _hidingActive;
+    volatile bool _replugNeeded;
+    string? _lastDevicePath;
 
     AppConfig _config;
     string? _lastForeground;
     StatusView? _trayStatus;
     bool _viGEmInstalled;
-    bool _hidHideInstalled;
     IReadOnlyList<string> _conflicts = Array.Empty<string>();
     long _ticks;
     bool _toldAboutTray;
@@ -45,7 +52,11 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
         _ui = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
         _form.HiddenToTray += OnHiddenToTray;
         _form.Profiles.LoadConfig(_config);
-        _form.SetStartupOptions(StartupRegistration.IsEnabled, _config.StartMinimized);
+        _form.SetStartupOptions(StartupRegistration.IsEnabled, _config.StartMinimized, _config.HideDualSense);
+
+        if (HidHideCli.Locate() is { } hidHideCli)
+            _hider = new DeviceHider(new HidHideCli(hidHideCli, m => _log.Write("HIDHIDE", m)),
+                Environment.ProcessPath ?? Application.ExecutablePath);
 
         _host = new BridgeHost(ProfileSelector.Select(_config, null));
         _host.Event += e => _ui.Post(_ => Report(e.Kind, e.Message), null);
@@ -65,6 +76,7 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
         _timer.Tick += (_, _) => OnTick();
         _timer.Start();
         _host.Start();
+        QueueHiding(recover: true);
 
         _showWait = ThreadPool.RegisterWaitForSingleObject(showSignal,
             (_, _) => _ui.Post(_ => ShowWindow(), null), null, Timeout.Infinite, executeOnlyOnce: false);
@@ -92,9 +104,24 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
         bool paused = !_host.IsRunning;
         _menuPause.Text = paused ? "Resume" : "Pause";
         _form.SetPaused(paused);
+        QueueHiding(); // paused: give the DualSense back to games; resumed: hide it again
     }
 
-    public string? SaveConfig(AppConfig config)
+    public string? SaveProfiles(Profile global, IReadOnlyList<Profile> games) =>
+        SaveConfig(_config with { Global = global, Games = games });
+
+    public void SetHideDualSense(bool enabled)
+    {
+        if (SaveConfig(_config with { HideDualSense = enabled }) is { } error)
+        {
+            Report(HostEventKind.Error, $"Could not save setting: {error}");
+            return;
+        }
+        _form.SetStartupOptions(StartupRegistration.IsEnabled, _config.StartMinimized, _config.HideDualSense);
+        QueueHiding();
+    }
+
+    string? SaveConfig(AppConfig config)
     {
         try
         {
@@ -160,6 +187,15 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
             _menuStatus.Text = status.Title;
         }
 
+        // A DualSense appeared (or came back on another connection): make sure it is hidden.
+        string? devicePath = snapshot.Device?.DevicePath;
+        if (devicePath != _lastDevicePath)
+        {
+            _lastDevicePath = devicePath;
+            if (devicePath is not null)
+                QueueHiding();
+        }
+
         if (_ticks % 20 == 0) // ~1 s: follow the foreground game
             ApplyProfile(force: false);
         if (_ticks % 100 == 0) // ~5 s: drivers and other tools
@@ -186,17 +222,89 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
 
     void OnConfigReloaded(AppConfig config)
     {
+        bool hidingChanged = config.HideDualSense != _config.HideDualSense;
         _config = config;
         _form.Profiles.ExternalReload(config);
-        _form.SetStartupOptions(StartupRegistration.IsEnabled, config.StartMinimized);
+        _form.SetStartupOptions(StartupRegistration.IsEnabled, config.StartMinimized, config.HideDualSense);
         ApplyProfile(force: true);
+        if (hidingChanged)
+            QueueHiding();
         Report(HostEventKind.Info, "config.json changed on disk and was reloaded");
+    }
+
+    /// <summary>
+    /// Brings HidHide in line with what is wanted right now: DualSense hidden while the bridge runs
+    /// and the setting is on, visible otherwise. HidHideCLI calls are slow-ish, so this runs on a
+    /// worker, one request after another.
+    /// </summary>
+    void QueueHiding(bool recover = false)
+    {
+        if (_hider is null || _shutDown)
+            return;
+        bool want = _config.HideDualSense && _host.IsRunning;
+        lock (_hidingGate)
+            _hidingWork = _hidingWork.ContinueWith(_ => UpdateHiding(want, recover), TaskScheduler.Default);
+    }
+
+    void UpdateHiding(bool want, bool recover)
+    {
+        void Post(HostEventKind kind, string message) => _ui.Post(_ => Report(kind, message), null);
+        try
+        {
+            if (recover && _hider!.RecoverIfNeeded())
+                Post(HostEventKind.Warning, "Joyy did not exit cleanly last time; the DualSense was made visible again first");
+
+            if (want)
+            {
+                bool wasActive = _hidingActive, wasReplug = _replugNeeded;
+                int count = _hider!.Apply();
+                _hidingActive = count > 0;
+                _replugNeeded = _hider.HiddenByJoyy.Any(p => DeviceStack.HasHidHideFilter(p) == false);
+                if (_hidingActive && (!wasActive || wasReplug != _replugNeeded) && !_replugNeeded)
+                    Post(HostEventKind.Info, $"DualSense hidden from games ({count} device{(count == 1 ? "" : "s")}); only Joyy can see it");
+                if (_replugNeeded && !wasReplug)
+                    Post(HostEventKind.Warning, "HidHide is not attached to your DualSense yet: unplug it and plug it back in once (or restart Windows)");
+            }
+            else
+            {
+                bool had = _hider!.HasPendingRestore;
+                _hider.Restore();
+                _hidingActive = false;
+                _replugNeeded = false;
+                if (had)
+                    Post(HostEventKind.Info, "DualSense is visible to games again");
+            }
+            _hidingError = null;
+        }
+        catch (Exception ex)
+        {
+            _hidingError = ex.Message;
+            Post(HostEventKind.Error, $"Device hiding failed: {ex.Message}");
+        }
+        _ui.Post(_ => RefreshEnvironment(), null);
+    }
+
+    HidingView DescribeHiding()
+    {
+        if (_hider is null)
+            return new("Off. Games can also see the DualSense itself, which may cause double input. Install HidHide to fix this.",
+                Good: false, Warn: true, InstallLink: true);
+        if (!_config.HideDualSense)
+            return new("Off (turned off below). Games can also see the DualSense itself, which may cause double input.", false, true, false);
+        if (!_host.IsRunning)
+            return new("Paused, so the DualSense is visible to games again.", false, false, false);
+        if (_hidingError is { } error)
+            return new($"Error: {error}", false, true, false);
+        if (_replugNeeded)
+            return new("Almost done: unplug the DualSense and plug it back in once (or restart Windows) so HidHide can hide it.", false, true, false);
+        if (_hidingActive)
+            return new("On. Games see only the Xbox controller. Restart any game that was already open before Joyy.", true, false, false);
+        return new("Waiting for a DualSense to hide.", false, false, false);
     }
 
     void RefreshEnvironment()
     {
         _viGEmInstalled = DependencyChecker.IsViGEmBusInstalled;
-        _hidHideInstalled = DependencyChecker.IsHidHideInstalled;
         var conflicts = ConflictDetector.RunningConflicts();
         if (!conflicts.SequenceEqual(_conflicts))
         {
@@ -204,7 +312,9 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
                 Report(HostEventKind.Warning, $"{c} is running and may also use the DualSense (possible double controller)");
             _conflicts = conflicts;
         }
-        _form.SetEnvironment(_hidHideInstalled, _conflicts);
+        _form.SetEnvironment(DescribeHiding(), _conflicts);
+        _menuHide.Enabled = _hider is not null;
+        _menuHide.Checked = _hider is not null && _config.HideDualSense;
     }
 
     void Report(HostEventKind kind, string message)
@@ -223,7 +333,8 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
         menu.Items.Add("Open Joyy", null, (_, _) => ShowWindow());
         _menuPause.Click += (_, _) => TogglePause();
         menu.Items.Add(_menuPause);
-        menu.Items.Add(new ToolStripMenuItem("Restore controller visibility (needs HidHide support)") { Enabled = false });
+        _menuHide.Click += (_, _) => SetHideDualSense(!_config.HideDualSense);
+        menu.Items.Add(_menuHide);
         menu.Items.Add("Open logs", null, (_, _) => OpenLogFolder());
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add("Exit", null, (_, _) => Exit());
@@ -258,6 +369,22 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
         _shutDown = true;
         _timer.Stop();
         _host.Dispose(); // unplugs the virtual controller
+
+        // Give the DualSense back to games. If this fails (or Joyy is killed before getting here),
+        // the journal makes the next start, or "Joyy.exe --restore", finish the job.
+        if (_hider is not null)
+        {
+            try
+            {
+                _hidingWork.Wait(TimeSpan.FromSeconds(10));
+                _hider.Restore();
+                _log.Write("INFO", "DualSense visibility restored on exit");
+            }
+            catch (Exception ex)
+            {
+                _log.Write("ERROR", $"Could not restore DualSense visibility on exit: {ex.Message}");
+            }
+        }
         _showWait.Unregister(null);
         _store.Dispose();
         _tray.Visible = false;

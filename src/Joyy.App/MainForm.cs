@@ -7,13 +7,18 @@ namespace Joyy.App;
 internal interface IAppActions
 {
     void TogglePause();
-    string? SaveConfig(AppConfig config);
+    /// <summary>Saves the editor's profiles into the current config; other settings are left as they are now.</summary>
+    string? SaveProfiles(Profile global, IReadOnlyList<Profile> games);
     void SetStartWithWindows(bool enabled);
     void SetStartMinimized(bool enabled);
+    void SetHideDualSense(bool enabled);
     void OpenLogFolder();
     void OpenConfigFile();
     void Exit();
 }
+
+/// <summary>The "Hide DualSense" status line.</summary>
+internal readonly record struct HidingView(string Text, bool Good, bool Warn, bool InstallLink);
 
 /// <summary>What the header and tray say for a given bridge state.</summary>
 internal readonly record struct StatusView(Color Color, Icon Icon, string Title, string Detail)
@@ -58,6 +63,7 @@ internal sealed class MainForm : Form
     readonly Button _pause = new() { Text = "Pause", AutoSize = true, Padding = new Padding(10, 2, 10, 2) };
     readonly Label _controller = Value(), _virtual = Value(), _profile = Value(), _others = Value();
     readonly LinkLabel _hiding = new() { AutoSize = true, MaximumSize = new Size(760, 0), LinkColor = Theme.Accent };
+    readonly CheckBox _hideDualSense = new() { Text = "Hide the DualSense from games (recommended)", AutoSize = true };
     readonly CheckBox _startWithWindows = new() { Text = "Start Joyy with Windows", AutoSize = true };
     readonly CheckBox _startMinimized = new() { Text = "Start hidden in the tray", AutoSize = true };
     readonly TextBox _log = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical, Dock = DockStyle.Fill, BorderStyle = BorderStyle.None, BackColor = Theme.Card, Font = new Font("Consolas", 9f) };
@@ -76,7 +82,7 @@ internal sealed class MainForm : Form
         MinimumSize = new Size(760, 540);
         StartPosition = FormStartPosition.CenterScreen;
 
-        Profiles = new ProfileEditor(actions.SaveConfig) { Dock = DockStyle.Fill };
+        Profiles = new ProfileEditor(actions.SaveProfiles) { Dock = DockStyle.Fill };
 
         var tabs = new TabControl { Dock = DockStyle.Fill, Padding = new Point(14, 5) };
         tabs.TabPages.Add(Page("Overview", BuildOverview()));
@@ -89,6 +95,7 @@ internal sealed class MainForm : Form
         _pause.Click += (_, _) => _actions.TogglePause();
         _startWithWindows.CheckedChanged += (_, _) => { if (!_loadingOptions) _actions.SetStartWithWindows(_startWithWindows.Checked); };
         _startMinimized.CheckedChanged += (_, _) => { if (!_loadingOptions) _actions.SetStartMinimized(_startMinimized.Checked); };
+        _hideDualSense.CheckedChanged += (_, _) => { if (!_loadingOptions) _actions.SetHideDualSense(_hideDualSense.Checked); };
         _hiding.LinkClicked += (_, _) => OpenUrl(DependencyChecker.HidHideUrl);
     }
 
@@ -124,17 +131,16 @@ internal sealed class MainForm : Form
 
     public void SetPaused(bool paused) => _pause.Text = paused ? "Resume" : "Pause";
 
-    public void SetEnvironment(bool hidHideInstalled, IReadOnlyList<string> conflicts)
+    public void SetEnvironment(HidingView hiding, IReadOnlyList<string> conflicts)
     {
-        string hiding = hidHideInstalled
-            ? "HidHide is installed. Automatic hiding of the DualSense arrives in the next Joyy update."
-            : "Off. Games can also see the DualSense itself, which may cause double input. Install HidHide to fix this.";
-        if (_hiding.Text != hiding)
+        if (_hiding.Text != hiding.Text)
         {
-            _hiding.Text = hiding;
-            int at = hiding.IndexOf("Install HidHide", StringComparison.Ordinal);
+            _hiding.Text = hiding.Text;
+            int at = hiding.InstallLink ? hiding.Text.IndexOf("Install HidHide", StringComparison.Ordinal) : -1;
             _hiding.LinkArea = at >= 0 ? new LinkArea(at, "Install HidHide".Length) : new LinkArea(0, 0);
         }
+        _hiding.ForeColor = hiding.Warn ? Theme.Warn : hiding.Good ? Theme.Good : Theme.Text;
+        _hideDualSense.Enabled = !hiding.InstallLink;
 
         _others.Text = conflicts.Count == 0
             ? "None detected"
@@ -142,11 +148,12 @@ internal sealed class MainForm : Form
         _others.ForeColor = conflicts.Count == 0 ? Theme.Text : Theme.Warn;
     }
 
-    public void SetStartupOptions(bool withWindows, bool minimized)
+    public void SetStartupOptions(bool withWindows, bool minimized, bool hideDualSense)
     {
         _loadingOptions = true;
         _startWithWindows.Checked = withWindows;
         _startMinimized.Checked = minimized;
+        _hideDualSense.Checked = hideDualSense;
         _loadingOptions = false;
     }
 
@@ -223,6 +230,7 @@ internal sealed class MainForm : Form
         AddRow("Other tools", _others);
 
         var options = new FlowLayoutPanel { AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+        options.Controls.Add(_hideDualSense);
         options.Controls.Add(_startWithWindows);
         options.Controls.Add(_startMinimized);
         info.RowStyles.Add(new RowStyle(SizeType.AutoSize));

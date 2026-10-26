@@ -20,6 +20,15 @@ public static class DeviceIds
     public static bool IsDualSense(ushort vendorId, ushort productId) =>
         vendorId == SonyVendor && (productId == DualSense || productId == DualSenseEdge);
 
+    // USB: HID\VID_054C&PID_0CE6&MI_03\...   Bluetooth: HID\{00001124-...}_VID&0002054C_PID&0CE6\...
+    static readonly System.Text.RegularExpressions.Regex DualSenseInstance = new(
+        @"VID[_&](?:0002)?054C.*?PID[_&](?:0CE6|0DF2)",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant);
+
+    /// <summary>True for a Windows device instance path (as HidHide uses) of a DualSense or Edge, USB or Bluetooth.</summary>
+    public static bool IsDualSenseInstancePath(string? instancePath) =>
+        !string.IsNullOrEmpty(instancePath) && DualSenseInstance.IsMatch(instancePath);
+
     /// <summary>
     /// Classifies a Windows HID device path, e.g.
     /// <c>\\?\hid#vid_054c&amp;pid_0ce6&amp;mi_03#...</c> (USB) or

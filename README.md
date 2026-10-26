@@ -14,7 +14,7 @@ Full specification: [PROMPT.md](PROMPT.md).
 | M2 Read DualSense (SDL2) | Done (USB verified; Bluetooth not yet tried) |
 | M3 Virtual Xbox 360 pad (ViGEm) | Done (`joyy-cli selftest` passes end to end) |
 | M4 Rumble | Done in software; felt-on-the-controller check pending |
-| M5 Hide the DualSense (HidHide) | Blocked: HidHide driver not installed |
+| M5 Hide the DualSense (HidHide) | Done; verified against HidHide 1.5.230 (see below) |
 | M6 Tray app, settings, profiles | Done (restore-visibility item waits for M5) |
 | M7 Packaging | Not started |
 
@@ -48,6 +48,27 @@ Run `src\Joyy.App\bin\Release\net8.0-windows\win-x64\Joyy.exe` (after building).
 | `run` | Bridge the DualSense to a virtual Xbox 360 controller until Ctrl+C (`--trace` prints input/output) |
 | `selftest` | Scripted input through the real ViGEmBus driver, read back via XInput; checks every button, trigger, stick and rumble |
 | `xinput` | List controllers exactly as an XInput game sees them (`--rumble` pulses the first) |
+
+## Hiding the DualSense (HidHide)
+
+With [HidHide](https://github.com/nefarius/HidHide/releases) installed, Joyy hides the
+physical DualSense from every program except itself, so games see only the Xbox 360
+controller. It turns hiding off when you Pause or Exit.
+
+- **First time after installing HidHide:** unplug the DualSense and plug it back in once
+  (or restart Windows). HidHide only attaches to devices that are plugged in after it is
+  installed; Joyy checks the driver stack and tells you when this is needed.
+- Start Joyy **before** the game. A game that is already open keeps seeing the controller
+  it found at startup.
+- **Safety:** every change is written to `%LOCALAPPDATA%\Joyy\hidden-devices.json` before it
+  is made, and only those changes are undone (your own HidHide settings are left alone).
+  If Joyy is killed, the next start restores first. Emergency fix at any time:
+  `Joyy.exe --restore` (or `joyy-cli restore`).
+
+HidHideCLI flags used, verified with `HidHideCLI --help` of version 1.5.230:
+`--cloak-on`, `--cloak-off`, `--cloak-state`, `--dev-hide`, `--dev-unhide`, `--dev-list`,
+`--dev-gaming`, `--app-reg`, `--app-unreg`, `--app-list`. On this PC they worked without
+administrator rights.
 
 ## Known driver quirk
 
