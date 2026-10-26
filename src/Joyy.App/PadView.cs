@@ -121,9 +121,11 @@ internal sealed class PadView : Control
 
     // ------------------------------------------------------------------ photo mode
 
-    // Button positions measured on the reference product photos (pixels of a 2000x1333
-    // DualSense shot and a 1040x1040 Xbox shot); scaled to whatever size the photo has.
-    const float DsRefW = 2000, DsRefH = 1333, XbRefW = 1040, XbRefH = 1040;
+    // Button positions measured on the reference product photos, both 1600x1600:
+    //   DualSense: PlayStation Direct "dualsense-ps5-controller-white-accessory-front"
+    //   Xbox:      Microsoft Store "gldn-Xbox-Cntrl-Black-b00" (Xbox Wireless Controller, Carbon Black)
+    // Scaled to whatever resolution the installed photo has.
+    const float DsRefW = 1600, DsRefH = 1600, XbRefW = 1600, XbRefH = 1600;
 
     void DrawPhoto(Graphics g, PhotoSkin skin)
     {
@@ -135,6 +137,19 @@ internal sealed class PadView : Control
             area.X + (area.Width - skin.Image.Width * scale) / 2,
             area.Y + (area.Height - skin.Image.Height * scale) / 2,
             skin.Image.Width * scale, skin.Image.Height * scale);
+
+        // Soft light behind the controller so a black one still stands out on the dark theme.
+        using (var halo = new GraphicsPath())
+        {
+            var light = RectangleF.Inflate(dest, dest.Width * 0.12f, dest.Height * 0.18f);
+            halo.AddEllipse(light);
+            using var brush = new PathGradientBrush(halo)
+            {
+                CenterColor = Color.FromArgb(46, 0xA8, 0xB8, 0xD8),
+                SurroundColors = new[] { Color.FromArgb(0, 0xA8, 0xB8, 0xD8) },
+            };
+            g.FillPath(brush, halo);
+        }
         g.DrawImage(skin.Image, dest);
 
         bool ds = Kind == PadKind.DualSense;
@@ -143,67 +158,67 @@ internal sealed class PadView : Control
             dest.X + (x / refW * skin.Source.Width - skin.Crop.X) * scale,
             dest.Y + (y / refH * skin.Source.Height - skin.Crop.Y) * scale);
         float R(float r) => r / refW * skin.Source.Width * scale;
-        RectangleF Bar(float centerX) => new(P(centerX, 0).X - R(ds ? 95 : 70), band * 0.28f, R(ds ? 190 : 140), Math.Max(10, band * 0.42f));
+        RectangleF Bar(float centerX) => new(P(centerX, 0).X - R(ds ? 80 : 110), band * 0.28f, R(ds ? 160 : 220), Math.Max(10, band * 0.42f));
 
         if (ds)
         {
             bool B(PhysicalButton b) => _ds.IsPressed(b);
             var accent = Theme.Accent;
-            TriggerBar(g, Bar(626), "L2", _ds.L2, accent);
-            TriggerBar(g, Bar(1375), "R2", _ds.R2, accent);
-            if (B(PhysicalButton.L1)) GlowEllipse(g, P(626, 286), R(105), R(34), accent);
-            if (B(PhysicalButton.R1)) GlowEllipse(g, P(1375, 286), R(105), R(34), accent);
+            TriggerBar(g, Bar(550), "L2", _ds.L2, accent);
+            TriggerBar(g, Bar(1060), "R2", _ds.R2, accent);
+            if (B(PhysicalButton.L1)) GlowEllipse(g, P(550, 556), R(62), R(16), accent);
+            if (B(PhysicalButton.R1)) GlowEllipse(g, P(1060, 556), R(62), R(16), accent);
 
-            PhotoButton(g, P(1375, 402), R(40), Theme.PsTriangle, B(PhysicalButton.Triangle));
-            PhotoButton(g, P(1463, 492), R(40), Theme.PsCircle, B(PhysicalButton.Circle));
-            PhotoButton(g, P(1375, 580), R(40), Theme.PsCross, B(PhysicalButton.Cross));
-            PhotoButton(g, P(1287, 492), R(40), Theme.PsSquare, B(PhysicalButton.Square));
-            PhotoButton(g, P(624, 425), R(38), accent, B(PhysicalButton.DpadUp));
-            PhotoButton(g, P(624, 560), R(38), accent, B(PhysicalButton.DpadDown));
-            PhotoButton(g, P(556, 492), R(38), accent, B(PhysicalButton.DpadLeft));
-            PhotoButton(g, P(692, 492), R(38), accent, B(PhysicalButton.DpadRight));
-            PhotoButton(g, P(718, 362), R(24), accent, B(PhysicalButton.Create));
-            PhotoButton(g, P(1282, 362), R(24), accent, B(PhysicalButton.Options));
-            PhotoButton(g, P(1000, 655), R(44), accent, B(PhysicalButton.PS));
-            PhotoButton(g, P(1000, 722), R(30), Color.FromArgb(0xFF, 0x8A, 0x3D), B(PhysicalButton.Mute));
+            PhotoButton(g, P(1058, 639), R(27), Theme.PsTriangle, B(PhysicalButton.Triangle));
+            PhotoButton(g, P(1117, 699), R(27), Theme.PsCircle, B(PhysicalButton.Circle));
+            PhotoButton(g, P(1058, 758), R(27), Theme.PsCross, B(PhysicalButton.Cross));
+            PhotoButton(g, P(998, 699), R(27), Theme.PsSquare, B(PhysicalButton.Square));
+            PhotoButton(g, P(551, 656), R(25), accent, B(PhysicalButton.DpadUp));
+            PhotoButton(g, P(551, 745), R(25), accent, B(PhysicalButton.DpadDown));
+            PhotoButton(g, P(505, 699), R(25), accent, B(PhysicalButton.DpadLeft));
+            PhotoButton(g, P(597, 699), R(25), accent, B(PhysicalButton.DpadRight));
+            PhotoButton(g, P(614, 605), R(15), accent, B(PhysicalButton.Create));
+            PhotoButton(g, P(994, 605), R(15), accent, B(PhysicalButton.Options));
+            PhotoButton(g, P(805, 805), R(30), accent, B(PhysicalButton.PS));
+            PhotoButton(g, P(805, 853), R(18), Color.FromArgb(0xFF, 0x8A, 0x3D), B(PhysicalButton.Mute));
 
             if (B(PhysicalButton.Touchpad))
             {
-                var tl = P(764, 292);
-                var br = P(1236, 528);
+                var tl = P(643, 560);
+                var br = P(963, 724);
                 var pad = RectangleF.FromLTRB(tl.X, tl.Y, br.X, br.Y);
-                GlowRect(g, pad, R(30), accent);
-                using var path = Theme.RoundedRect(pad, R(40));
+                GlowRect(g, pad, R(20), accent);
+                using var path = Theme.RoundedRect(pad, R(26));
                 using var fill = new SolidBrush(Color.FromArgb(110, accent));
                 g.FillPath(fill, path);
             }
 
-            PhotoStick(g, P(808, 657), R(80), _ds.LeftX, _ds.LeftY, B(PhysicalButton.L3), accent);
-            PhotoStick(g, P(1192, 657), R(80), _ds.RightX, _ds.RightY, B(PhysicalButton.R3), accent);
+            PhotoStick(g, P(675, 809), R(52), _ds.LeftX, _ds.LeftY, B(PhysicalButton.L3), accent);
+            PhotoStick(g, P(937, 809), R(52), _ds.RightX, _ds.RightY, B(PhysicalButton.R3), accent);
         }
         else
         {
             bool B(X360Buttons b) => _xb.IsPressed(b);
             var accent = Theme.XbGreen;
-            TriggerBar(g, Bar(300), "LT", _xb.LeftTrigger, accent);
-            TriggerBar(g, Bar(742), "RT", _xb.RightTrigger, accent);
-            if (B(X360Buttons.LeftShoulder)) GlowEllipse(g, P(300, 240), R(88), R(24), accent);
-            if (B(X360Buttons.RightShoulder)) GlowEllipse(g, P(742, 240), R(88), R(24), accent);
+            TriggerBar(g, Bar(493), "LT", _xb.LeftTrigger, accent);
+            TriggerBar(g, Bar(1122), "RT", _xb.RightTrigger, accent);
+            if (B(X360Buttons.LeftShoulder)) GlowEllipse(g, P(493, 384), R(115), R(24), accent);
+            if (B(X360Buttons.RightShoulder)) GlowEllipse(g, P(1122, 384), R(115), R(24), accent);
 
-            PhotoButton(g, P(748, 338), R(31), Theme.XbY, B(X360Buttons.Y));
-            PhotoButton(g, P(810, 400), R(31), Theme.XbB, B(X360Buttons.B));
-            PhotoButton(g, P(748, 461), R(31), Theme.XbA, B(X360Buttons.A));
-            PhotoButton(g, P(686, 399), R(31), Theme.XbX, B(X360Buttons.X));
-            PhotoButton(g, P(520, 300), R(34), accent, B(X360Buttons.Guide));
-            PhotoButton(g, P(455, 395), R(22), accent, B(X360Buttons.Back));
-            PhotoButton(g, P(585, 395), R(22), accent, B(X360Buttons.Start));
-            PhotoButton(g, P(390, 505), R(25), accent, B(X360Buttons.DpadUp));
-            PhotoButton(g, P(390, 587), R(25), accent, B(X360Buttons.DpadDown));
-            PhotoButton(g, P(349, 546), R(25), accent, B(X360Buttons.DpadLeft));
-            PhotoButton(g, P(431, 546), R(25), accent, B(X360Buttons.DpadRight));
+            PhotoButton(g, P(1120, 524), R(44), Theme.XbY, B(X360Buttons.Y));
+            PhotoButton(g, P(1205, 607), R(44), Theme.XbB, B(X360Buttons.B));
+            PhotoButton(g, P(1120, 692), R(44), Theme.XbA, B(X360Buttons.A));
+            PhotoButton(g, P(1034, 607), R(44), Theme.XbX, B(X360Buttons.X));
+            PhotoButton(g, P(801, 479), R(48), accent, B(X360Buttons.Guide));
+            PhotoButton(g, P(709, 606), R(28), accent, B(X360Buttons.Back));   // View button
+            PhotoButton(g, P(891, 606), R(28), accent, B(X360Buttons.Start));  // Menu button
+            PhotoButton(g, P(636, 743), R(30), accent, B(X360Buttons.DpadUp));
+            PhotoButton(g, P(636, 866), R(30), accent, B(X360Buttons.DpadDown));
+            PhotoButton(g, P(575, 803), R(30), accent, B(X360Buttons.DpadLeft));
+            PhotoButton(g, P(698, 803), R(30), accent, B(X360Buttons.DpadRight));
 
-            PhotoStick(g, P(285, 388), R(64), _xb.ThumbLX, _xb.ThumbLY, B(X360Buttons.LeftThumb), accent);
-            PhotoStick(g, P(640, 530), R(64), _xb.ThumbRX, _xb.ThumbRY, B(X360Buttons.RightThumb), accent);
+            PhotoStick(g, P(476, 610), R(72), _xb.ThumbLX, _xb.ThumbLY, B(X360Buttons.LeftThumb), accent);
+            PhotoStick(g, P(960, 782), R(72), _xb.ThumbRX, _xb.ThumbRY, B(X360Buttons.RightThumb), accent);
         }
     }
 

@@ -76,7 +76,8 @@ internal sealed class PhotoSkin : IDisposable
         var pixels = new byte[w * h * 4];
         frame.CopyPixels(pixels, w * 4, 0);
 
-        var crop = RemoveBackground(pixels, w, h);
+        // Product PNGs often already have a transparent background; then trust it as-is.
+        var crop = HasTransparentBorder(pixels, w, h) ? AlphaBounds(pixels, w, h) : RemoveBackground(pixels, w, h);
 
         var bitmap = new Bitmap(crop.Width, crop.Height, PixelFormat.Format32bppArgb);
         var data = bitmap.LockBits(new Rectangle(0, 0, crop.Width, crop.Height), ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
@@ -150,6 +151,26 @@ internal sealed class PhotoSkin : IDisposable
             if (y < h - 1) Visit(p + w);
         }
 
+        return AlphaBounds(px, w, h);
+    }
+
+    static bool HasTransparentBorder(byte[] px, int w, int h)
+    {
+        int clear = 0, total = 0;
+        void Check(int x, int y)
+        {
+            total++;
+            if (px[(y * w + x) * 4 + 3] < 16)
+                clear++;
+        }
+        for (int x = 0; x < w; x += 4) { Check(x, 0); Check(x, h - 1); }
+        for (int y = 0; y < h; y += 4) { Check(0, y); Check(w - 1, y); }
+        return clear > total * 0.9;
+    }
+
+    /// <summary>Bounding box of the clearly visible pixels.</summary>
+    static Rectangle AlphaBounds(byte[] px, int w, int h)
+    {
         int minX = w, minY = h, maxX = -1, maxY = -1;
         for (int y = 0; y < h; y++)
         {
