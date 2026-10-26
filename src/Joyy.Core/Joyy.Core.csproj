@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pure logic: no UI, no P/Invoke, no SDL/ViGEm references. -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>Joyy.Core</RootNamespace>
+  </PropertyGroup>
+
+</Project>
