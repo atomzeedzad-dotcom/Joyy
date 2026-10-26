@@ -37,6 +37,10 @@ public static class AnalogMath
         return (byte)Math.Round(Math.Clamp(n, 0.0, 1.0) * 255.0);
     }
 
+    /// <summary>Converts a 0..32767 trigger axis (SDL's range) to 0..255; negative input counts as released.</summary>
+    public static byte Trigger15To8(short value) =>
+        value <= 0 ? (byte)0 : (byte)Math.Round(value * 255.0 / 32767.0);
+
     /// <summary>Negates an axis without overflowing at short.MinValue.</summary>
     public static short Invert(short value) => value == short.MinValue ? short.MaxValue : (short)-value;
 

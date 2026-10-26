@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Developer/diagnostic console: live input viewer now; headless bridge and restore command later. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>Joyy.Cli</RootNamespace>
+    <AssemblyName>joyy-cli</AssemblyName>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Joyy.Platform\Joyy.Platform.csproj" />
+  </ItemGroup>
+
+</Project>

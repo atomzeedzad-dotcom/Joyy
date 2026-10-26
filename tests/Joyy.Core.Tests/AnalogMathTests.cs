@@ -125,6 +125,19 @@ public class AnalogMathTests
 
     [Theory]
     [InlineData(0, 0)]
+    [InlineData(-5, 0)]
+    [InlineData(-32768, 0)]
+    [InlineData(32767, 255)]
+    [InlineData(16384, 128)]
+    [InlineData(64, 0)]
+    [InlineData(65, 1)]
+    public void Trigger15To8_scales_SDL_range(int value, int expected)
+    {
+        Assert.Equal((byte)expected, AnalogMath.Trigger15To8((short)value));
+    }
+
+    [Theory]
+    [InlineData(0, 0)]
     [InlineData(1, -1)]
     [InlineData(-1, 1)]
     [InlineData(32767, -32767)]

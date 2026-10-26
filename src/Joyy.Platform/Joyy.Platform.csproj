@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Hardware access: SDL2 (input), later ViGEm (output) and HidHide (device hiding). -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <RootNamespace>Joyy.Platform</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Native SDL2.dll only; bindings are our own (Sdl/SdlNative.cs). -->
+    <PackageReference Include="Ultz.Native.SDL" Version="2.32.10" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Joyy.Core\Joyy.Core.csproj" />
+  </ItemGroup>
+
+</Project>
