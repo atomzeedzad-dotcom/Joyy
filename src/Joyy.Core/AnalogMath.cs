@@ -41,6 +41,13 @@ public static class AnalogMath
     public static byte Trigger15To8(short value) =>
         value <= 0 ? (byte)0 : (byte)Math.Round(value * 255.0 / 32767.0);
 
+    /// <summary>
+    /// Converts an Xbox 360 motor strength (0..255, as ViGEm reports it) to SDL's 0..65535
+    /// rumble range, scaled by the profile's rumble factor.
+    /// </summary>
+    public static ushort RumbleToSdl(byte motor, double scale) =>
+        (ushort)Math.Clamp(Math.Round(motor * 257.0 * scale), 0, ushort.MaxValue);
+
     /// <summary>Negates an axis without overflowing at short.MinValue.</summary>
     public static short Invert(short value) => value == short.MinValue ? short.MaxValue : (short)-value;
 

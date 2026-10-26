@@ -10,23 +10,41 @@ Full specification: [PROMPT.md](PROMPT.md).
 
 | Milestone | State |
 |---|---|
-| M1 Core mapping + unit tests | Code written, waiting for first test run |
-| M2 Read DualSense (SDL2) | Not started |
-| M3 Virtual Xbox 360 pad (ViGEm) | Not started |
-| M4 Rumble | Not started |
-| M5 Hide the DualSense (HidHide) | Not started |
+| M1 Core mapping + unit tests | Done |
+| M2 Read DualSense (SDL2) | Done (USB verified; Bluetooth not yet tried) |
+| M3 Virtual Xbox 360 pad (ViGEm) | Done (`joyy-cli selftest` passes end to end) |
+| M4 Rumble | Done in software; felt-on-the-controller check pending |
+| M5 Hide the DualSense (HidHide) | Blocked: HidHide driver not installed |
 | M6 Tray app, settings, profiles | Not started |
 | M7 Packaging | Not started |
 
 ## Building (developers)
 
-Requires the .NET 8 SDK.
+Requires the .NET 8 SDK and, at runtime, the ViGEmBus driver.
 
 ```powershell
 .\tools\test.ps1
 ```
 
+## Developer CLI (`joyy-cli`)
+
+| Command | What it does |
+|---|---|
+| `view` | Live DualSense input next to the Xbox 360 report it maps to |
+| `run` | Bridge the DualSense to a virtual Xbox 360 controller until Ctrl+C (`--trace` prints input/output) |
+| `selftest` | Scripted input through the real ViGEmBus driver, read back via XInput; checks every button, trigger, stick and rumble |
+| `xinput` | List controllers exactly as an XInput game sees them (`--rumble` pulses the first) |
+
+## Known driver quirk
+
+A freshly plugged ViGEm Xbox 360 pad reports uninitialized stick values to XInput until
+it receives a report that differs from all-zero. `ViGEmPad.Connect` sends one
+imperceptible priming report to avoid phantom stick drift. `selftest` checks this
+("Fresh pad at rest").
+
 ## Layout
 
 - `src/Joyy.Core` — pure mapping logic (no hardware, no UI).
-- `tests/Joyy.Core.Tests` — xUnit tests for the mapping, deadzones, triggers and D-pad.
+- `src/Joyy.Platform` — SDL2 input, ViGEm output, the `Bridge` loop.
+- `src/Joyy.Cli` — developer/diagnostic console.
+- `tests/` — xUnit tests (Core logic, Bridge against fakes).

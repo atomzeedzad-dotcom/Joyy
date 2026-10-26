@@ -137,6 +137,18 @@ public class AnalogMathTests
     }
 
     [Theory]
+    [InlineData(0, 1.0, 0)]
+    [InlineData(255, 1.0, 65535)]
+    [InlineData(128, 1.0, 32896)]
+    [InlineData(128, 0.5, 16448)]
+    [InlineData(255, 2.0, 65535)]
+    [InlineData(255, 0.0, 0)]
+    public void RumbleToSdl_scales_and_clamps(int motor, double scale, int expected)
+    {
+        Assert.Equal((ushort)expected, AnalogMath.RumbleToSdl((byte)motor, scale));
+    }
+
+    [Theory]
     [InlineData(0, 0)]
     [InlineData(1, -1)]
     [InlineData(-1, 1)]

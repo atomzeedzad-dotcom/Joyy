@@ -10,6 +10,7 @@
   <ItemGroup>
     <!-- Native SDL2.dll only; bindings are our own (Sdl/SdlNative.cs). -->
     <PackageReference Include="Ultz.Native.SDL" Version="2.32.10" />
+    <PackageReference Include="Nefarius.ViGEm.Client" Version="1.21.256" />
   </ItemGroup>
 
   <ItemGroup>
