@@ -189,6 +189,59 @@ public sealed class DeviceHiderTests : IDisposable
     }
 
     [Fact]
+    public void Guardian_restores_what_the_dead_process_hid()
+    {
+        new DeviceHider(_hh, App, _journal, ownerPid: 1111).Apply(); // Joyy (pid 1111) dies without restoring
+
+        var guardian = new DeviceHider(_hh, App, _journal, ownerPid: 2222);
+        Assert.True(guardian.RestoreIfOwnedBy(1111));
+
+        Assert.Empty(_hh.Hidden);
+        Assert.False(_hh.Cloak);
+        Assert.False(File.Exists(_journal));
+    }
+
+    [Fact]
+    public void Guardian_leaves_a_newer_Joyys_hiding_alone()
+    {
+        new DeviceHider(_hh, App, _journal, ownerPid: 1111).Apply();
+        new DeviceHider(_hh, App, _journal, ownerPid: 3333).Apply(); // Joyy restarted and took over the journal
+
+        Assert.False(new DeviceHider(_hh, App, _journal, ownerPid: 2222).RestoreIfOwnedBy(1111));
+
+        Assert.Equal(new[] { UsbPad }, _hh.Hidden);
+        Assert.True(File.Exists(_journal));
+    }
+
+    [Fact]
+    public void Guardian_does_nothing_when_Joyy_already_restored()
+    {
+        var joyy = new DeviceHider(_hh, App, _journal, ownerPid: 1111);
+        joyy.Apply();
+        joyy.Restore();
+        _hh.Calls.Clear();
+
+        Assert.False(new DeviceHider(_hh, App, _journal, ownerPid: 2222).RestoreIfOwnedBy(1111));
+        Assert.Empty(_hh.Calls);
+    }
+
+    [Fact]
+    public async Task Two_hiders_can_use_the_same_journal_from_different_threads()
+    {
+        // The cross-process mutex must not deadlock or throw when contended.
+        var a = new DeviceHider(_hh, App, _journal, ownerPid: 1);
+        var b = new DeviceHider(_hh, App, _journal, ownerPid: 1);
+        var tasks = Enumerable.Range(0, 8).Select(i => Task.Run(() =>
+        {
+            var h = i % 2 == 0 ? a : b;
+            h.Apply();
+            h.Restore();
+        })).ToArray();
+        await Task.WhenAll(tasks).WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.Empty(_hh.Hidden);
+    }
+
+    [Fact]
     public void Parses_cli_list_output()
     {
         string output = "--dev-hide \"HID\\VID_054C&PID_0CE6&MI_03\\8&22953b1d&0&0000\"\r\n--dev-hide \"HID\\X\"\r\n";

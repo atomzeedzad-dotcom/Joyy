@@ -19,6 +19,8 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
     readonly SynchronizationContext _ui;
     readonly System.Windows.Forms.Timer _timer = new() { Interval = 50 };
     readonly RegisteredWaitHandle _showWait;
+    readonly RegisteredWaitHandle _quitWait;
+    Process? _guardian;
     readonly ToolStripMenuItem _menuStatus = new() { Enabled = false };
     readonly ToolStripMenuItem _menuProfile = new() { Enabled = false };
     readonly ToolStripMenuItem _menuPause = new("Pause");
@@ -40,7 +42,7 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
     bool _toldAboutTray;
     bool _shutDown;
 
-    public TrayApp(bool startHidden, EventWaitHandle showSignal)
+    public TrayApp(bool startHidden, EventWaitHandle showSignal, EventWaitHandle quitSignal)
     {
         _log.Write("INFO", $"Joyy starting ({Environment.ProcessPath})");
 
@@ -79,6 +81,9 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
 
         _showWait = ThreadPool.RegisterWaitForSingleObject(showSignal,
             (_, _) => _ui.Post(_ => ShowWindow(), null), null, Timeout.Infinite, executeOnlyOnce: false);
+        // "Joyy.exe --quit" (used by the installer when updating) asks us to exit cleanly.
+        _quitWait = ThreadPool.RegisterWaitForSingleObject(quitSignal,
+            (_, _) => _ui.Post(_ => Exit(), null), null, Timeout.Infinite, executeOnlyOnce: true);
 
         Application.ApplicationExit += (_, _) => Shutdown();
         SystemEvents.SessionEnding += (_, _) => Shutdown();
@@ -267,6 +272,8 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
             {
                 bool wasActive = _hidingActive, wasReplug = _replugNeeded;
                 int count = _hider!.Apply();
+                if (count > 0)
+                    EnsureGuardian();
                 _hidingActive = count > 0;
                 _replugNeeded = _hider.HiddenByJoyy.Any(p => DeviceStack.HasHidHideFilter(p) == false);
                 if (_hidingActive && (!wasActive || wasReplug != _replugNeeded) && !_replugNeeded)
@@ -291,6 +298,30 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
             Post(HostEventKind.Error, $"Device hiding failed: {ex.Message}");
         }
         _ui.Post(_ => RefreshEnvironment(), null);
+    }
+
+    /// <summary>
+    /// Starts the small "--guardian" helper that gives the DualSense back if this process dies
+    /// without cleaning up, so the controller never stays hidden with Joyy closed.
+    /// </summary>
+    void EnsureGuardian()
+    {
+        if (_guardian is { HasExited: false })
+            return;
+        try
+        {
+            _guardian?.Dispose();
+            _guardian = Process.Start(new ProcessStartInfo(Environment.ProcessPath ?? Application.ExecutablePath,
+                $"--guardian {Environment.ProcessId}")
+            {
+                UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden,
+            });
+            _log.Write("INFO", "Guardian started: the DualSense is given back automatically if Joyy dies");
+        }
+        catch (Exception ex)
+        {
+            _log.Write("WARNING", $"Could not start the guardian: {ex.Message}");
+        }
     }
 
     HidingView DescribeHiding()
@@ -397,6 +428,7 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
             }
         }
         _showWait.Unregister(null);
+        _quitWait.Unregister(null);
         _store.Dispose();
         _tray.Visible = false;
         _tray.Dispose();

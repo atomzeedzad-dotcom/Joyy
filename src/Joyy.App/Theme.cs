@@ -241,7 +241,20 @@ internal static partial class Icons
     public static readonly Icon Ready = Create(Theme.Good);
     public static readonly Icon Waiting = Create(Theme.Idle);
     public static readonly Icon Error = Create(Theme.Bad);
-    public static readonly Icon App = Create(Theme.Accent);
+    public static readonly Icon App = FromExe() ?? Create(Theme.Accent);
+
+    /// <summary>The icon embedded in Joyy.exe (same one Start menu and the taskbar show).</summary>
+    static Icon? FromExe()
+    {
+        try
+        {
+            return Environment.ProcessPath is { } exe ? Icon.ExtractAssociatedIcon(exe) : null;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
+    }
 
     static Icon Create(Color color)
     {

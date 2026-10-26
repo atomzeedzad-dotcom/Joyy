@@ -26,9 +26,31 @@ Requires the .NET 8 SDK and, at runtime, the ViGEmBus driver.
 .\tools\test.ps1
 ```
 
+## Install
+
+`tools\publish.ps1` builds `artifacts\publish\Joyy.exe`: one self-contained file (no .NET
+install needed). Double-click it and it offers to install itself:
+
+- copies Joyy to `%LOCALAPPDATA%\Programs\Joyy` (no administrator rights),
+- adds **Joyy** to the Start menu, so typing "Joyy" in Windows search finds it,
+- adds an entry in Windows Settings → Apps (uninstall from there, or `Joyy.exe --uninstall`),
+- asks separately whether to **start with Windows** (recommended: your DualSense only works
+  as an Xbox controller while Joyy runs; it is never switched on without asking).
+
+Command line: `Joyy.exe --install [--quiet] [--autostart | --no-autostart] [--no-launch]`,
+`--uninstall [--quiet]`, `--quit` (exit a running Joyy cleanly), `--restore` (emergency: make
+the DualSense visible again).
+
+### The controller never stays hidden
+
+While Joyy hides the DualSense it also runs a tiny `--guardian` helper. If Joyy is killed
+(crash, Task Manager "End task"), the guardian gives the DualSense back within about a second;
+a restart of Joyy and `Joyy.exe --restore` also fix it. Only the process that hid the
+controller can be restored by its guardian, so a newer Joyy is never undone by an old one.
+
 ## Using Joyy
 
-Run `src\Joyy.App\bin\Release\net8.0-windows\win-x64\Joyy.exe` (after building).
+Open **Joyy** from the Start menu (or run `src\Joyy.App\bin\Release\net8.0-windows\win-x64\Joyy.exe` after building).
 
 A DSX-style window: sidebar on the left, a controller chip at the top (with a
 power button that pauses/resumes the virtual controller), one page at a time.

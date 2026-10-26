@@ -15,6 +15,26 @@
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>
     <ApplicationVisualStyles>true</ApplicationVisualStyles>
     <ApplicationDefaultFont>Segoe UI, 9pt</ApplicationDefaultFont>
+
+    <!-- What Windows shows for the exe, the Start menu entry and Apps &amp; features. -->
+    <ApplicationIcon>Assets\joyy.ico</ApplicationIcon>
+    <Product>Joyy</Product>
+    <AssemblyTitle>Joyy</AssemblyTitle>
+    <Description>Use a PS5 DualSense as an Xbox 360 controller</Description>
+    <Company>Joyy</Company>
+    <Copyright>Joyy</Copyright>
+    <Version>1.0.0</Version>
+    <FileVersion>1.0.0.0</FileVersion>
+  </PropertyGroup>
+
+  <!-- Release package (tools\publish.ps1): one self-contained Joyy.exe that offers to install itself. -->
+  <PropertyGroup Condition="'$(JoyyPublished)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <DebugType>none</DebugType>
+    <DefineConstants>$(DefineConstants);PUBLISHED</DefineConstants>
   </PropertyGroup>
 
   <ItemGroup>
