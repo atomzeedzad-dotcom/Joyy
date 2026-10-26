@@ -283,7 +283,12 @@ internal sealed class MainForm : Form
     {
         var header = new Panel { Dock = DockStyle.Top, Height = 118, BackColor = Theme.Card };
 
-        var text = new FlowLayoutPanel { FlowDirection = FlowDirection.TopDown, AutoSize = true, Location = new Point(50, 14), WrapContents = false, BackColor = Theme.Card };
+        // GrowAndShrink: the default GrowOnly keeps the initial 100 px height, which covered the nav bar.
+        var text = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.TopDown, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Location = new Point(50, 14), WrapContents = false, BackColor = Theme.Card,
+        };
         text.Controls.Add(_status);
         text.Controls.Add(_detail);
         _dot.Location = new Point(22, 24);
@@ -293,6 +298,7 @@ internal sealed class MainForm : Form
         header.Resize += (_, _) => _pause.Location = new Point(header.ClientSize.Width - _pause.Width - 20, 22);
 
         header.Controls.Add(_nav);
+        _nav.BringToFront(); // never let the status text overlap the nav
 
         var line = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Theme.Border };
         header.Controls.Add(line);
