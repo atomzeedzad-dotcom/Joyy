@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Drawing.Drawing2D;
 
 namespace Joyy.App;
@@ -111,50 +111,12 @@ internal abstract class OwnerButton : Button
     }
 }
 
-/// <summary>Sidebar navigation item: icon + label, pill highlight with an accent bar when selected.</summary>
-internal sealed class NavItem : OwnerButton
-{
-    readonly string _glyph;
-    bool _selected;
-
-    public NavItem(string glyph, string text)
-    {
-        _glyph = glyph;
-        Text = text;
-        AccessibleName = text;
-        BackColor = Color.Transparent;
-        Font = new Font("Segoe UI", 9.75f);
-        Height = 38;
-        Dock = DockStyle.Top;
-        Margin = Padding.Empty;
-    }
-
-    [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-    public bool Selected
-    {
-        get => _selected;
-        set { _selected = value; Invalidate(); }
-    }
-
-    protected override void Draw(Graphics g)
-    {
-        var pill = new RectangleF(Px(6), Px(3), Width - Px(12), Height - Px(6));
-        if (_selected || Hovered)
-            FillRounded(g, pill, Px(6), _selected ? Color.FromArgb(70, 0xFF, 0xFF, 0xFF) : Color.FromArgb(32, 0xFF, 0xFF, 0xFF));
-        if (_selected)
-            FillRounded(g, new RectangleF(pill.X, pill.Y + pill.Height * 0.25f, Px(3), pill.Height * 0.5f), Px(2), Theme.Accent);
-
-        DrawGlyph(g, _glyph, new Rectangle(Px(16), 0, Px(24), Height), _selected ? Theme.Text : Theme.Muted, 11f);
-        TextRenderer.DrawText(g, Text, Font, new Rectangle(Px(48), 0, Width - Px(52), Height),
-            _selected ? Theme.Text : Color.FromArgb(0xD8, 0xD2, 0xE4), TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-    }
-}
-
 /// <summary>Home-page shortcut tile: icon, title, one-line description, chevron. A card itself.</summary>
 internal sealed class Tile : OwnerButton
 {
     readonly string _glyph;
-    readonly string _subtitle;
+    string _subtitle;
+    Color _subtitleColor = Theme.Muted;
 
     public Tile(string glyph, string title, string subtitle)
     {
@@ -166,6 +128,17 @@ internal sealed class Tile : OwnerButton
         Font = new Font("Segoe UI Semibold", 9.75f);
         Height = 62;
         Margin = new Padding(0, 0, 10, 10);
+    }
+
+    /// <summary>Live status line under the title (e.g. "On · games see 1 pad").</summary>
+    public void SetSubtitle(string text, Color? color = null)
+    {
+        var c = color ?? Theme.Muted;
+        if (text == _subtitle && c == _subtitleColor)
+            return;
+        _subtitle = text;
+        _subtitleColor = c;
+        Invalidate();
     }
 
     protected override void Draw(Graphics g)
@@ -181,7 +154,7 @@ internal sealed class Tile : OwnerButton
         DrawGlyph(g, _glyph, new Rectangle(Px(12), 0, Px(30), Height), Theme.Text, 13f);
         using var small = new Font("Segoe UI", 8.25f);
         TextRenderer.DrawText(g, Text, Font, new Rectangle(Px(50), Px(12), Width - Px(80), Px(20)), Theme.Text, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
-        TextRenderer.DrawText(g, _subtitle, small, new Rectangle(Px(50), Px(32), Width - Px(80), Px(18)), Theme.Muted, TextFormatFlags.EndEllipsis);
+        TextRenderer.DrawText(g, _subtitle, small, new Rectangle(Px(50), Px(32), Width - Px(80), Px(18)), _subtitleColor, TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
         DrawGlyph(g, Theme.Glyph.Chevron, new Rectangle(Width - Px(32), 0, Px(20), Height), Theme.Muted, 8f);
     }
 }
@@ -238,7 +211,7 @@ internal sealed class ActionRow : OwnerButton
     {
         var r = new RectangleF(Px(2), Px(2), Width - Px(4), Height - Px(4));
         if (Highlighted || (Hovered && Enabled))
-            FillRounded(g, r, Px(8), Highlighted ? Color.FromArgb(0x3A, 0x2C, 0x4E) : Theme.Hover);
+            FillRounded(g, r, Px(8), Highlighted ? Color.FromArgb(0x14, 0x22, 0x3A) : Theme.Hover);
         if (Highlighted)
         {
             using var path = Theme.RoundedRect(r, Px(8));

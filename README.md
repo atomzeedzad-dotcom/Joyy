@@ -52,11 +52,14 @@ controller can be restored by its guardian, so a newer Joyy is never undone by a
 
 Open **Joyy** from the Start menu (or run `src\Joyy.App\bin\Release\net8.0-windows\win-x64\Joyy.exe` after building).
 
-A DSX-style window: sidebar on the left, a controller chip at the top (with a
-power button that pauses/resumes the virtual controller), one page at a time.
+A black window with a slim top bar: the Joyy logo, the bridge status ("Ready to
+play · Xbox 360 slot 1"), the profile in use (click it for Profiles) and a power
+button that pauses/resumes the virtual controller.
 
-- **Home**: your DualSense live, Virtual device Off / Xbox 360, quick actions
-  (hide DualSense, active profile, test rumble) and shortcuts to every page.
+- **Home**: your DualSense large in the middle, live (pressed buttons glow, L2/R2
+  bars above). Underneath, what the last button press sends to the game
+  ("Cross → A"), then six tiles that show each feature's state and open its page.
+  Every other page opens in the same space with a back button (or press Esc).
 - **My Controller**: device information (type, connection, VID/PID, serial,
   polling rate, virtual slot) and health checks for the drivers.
 - **Profiles**: "All games" plus one profile per game, used automatically while
@@ -66,7 +69,7 @@ power button that pauses/resumes the virtual controller), one page at a time.
   what it sends. Nintendo layout toggle.
 - **Sticks & Triggers**: live stick circles with deadzone/full-tilt rings, trigger
   meters, sliders, inversion, rumble strength and a test buzz.
-- **Hide DualSense**, **Log**, **Settings** (startup, controller pictures, files, about).
+- **Hide DualSense**, **Settings** (startup, controller pictures, log, files, about).
 - Edits stay pending until **Save**; **Revert** undoes them.
 - Closing the window keeps Joyy running in the tray; use the tray menu's **Exit** to quit.
 - Settings live in `%APPDATA%\Joyy\config.json` (hand edits are picked up live);

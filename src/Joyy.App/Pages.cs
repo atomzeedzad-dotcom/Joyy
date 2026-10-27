@@ -8,200 +8,238 @@ namespace Joyy.App;
 
 // ---------------------------------------------------------------------------------------- Home
 
-/// <summary>Banner at the top of Home: gradient, the Xbox controller picture, name and status.</summary>
-internal sealed class HeroBanner : RoundCard
+/// <summary>
+/// The line under the big controller: "Cross → (A)" for the last button pressed, so you see at a
+/// glance what the game receives. Shows a hint until something is pressed.
+/// </summary>
+internal sealed class MappingReadout : Control
 {
-    string _status = "";
-    Color _statusColor = Theme.Idle;
+    string _from = "";
+    string _to = "";
+    Color _toColor = Theme.Raised;
+    bool _round;
+    string _detail = "";
 
-    public HeroBanner()
+    public MappingReadout()
     {
-        Outline = Color.FromArgb(0x5A, 0x4A, 0x8C);
+        SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        BackColor = Theme.Background;
+        Height = 58;
     }
 
-    public Image? Picture { get; set; }
-
-    public void SetStatus(string text, Color color)
+    public void Set(string from, string to, Color toColor, bool round, string detail)
     {
-        if (_status == text && _statusColor == color)
+        if (from == _from && to == _to && toColor == _toColor && detail == _detail)
             return;
-        _status = text;
-        _statusColor = color;
+        (_from, _to, _toColor, _round, _detail) = (from, to, toColor, round, detail);
         Invalidate();
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         var g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-        var r = new RectangleF(0.5f, 0.5f, Width - 1.5f, Height - 1.5f);
-        using var path = Theme.RoundedRect(r, LogicalToDeviceUnits(12));
-        using (var fill = new LinearGradientBrush(r, Color.FromArgb(0x4B, 0x2C, 0x7E), Color.FromArgb(0x16, 0x34, 0x86), 20f))
-            g.FillPath(fill, path);
+        g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        g.Clear(BackColor);
+        int line1 = LogicalToDeviceUnits(30);
+        using var big = new Font("Segoe UI Semibold", 13f);
+        using var small = new Font("Segoe UI", 8.75f);
 
-        var state = g.Save();
-        g.SetClip(path);
-        // Soft light blobs.
-        foreach (var (x, y, rad, color) in new[] { (0.78f, 0.2f, 0.55f, Color.FromArgb(70, 0x9D, 0x6B, 0xFF)), (0.95f, 0.95f, 0.5f, Color.FromArgb(60, 0x3B, 0x82, 0xF6)) })
+        if (_from.Length == 0)
         {
-            float cx = Width * x, cy = Height * y, rr = Height * rad * 2;
-            using var blob = new GraphicsPath();
-            blob.AddEllipse(cx - rr, cy - rr, rr * 2, rr * 2);
-            using var brush = new PathGradientBrush(blob) { CenterColor = color, SurroundColors = new[] { Color.FromArgb(0, color) } };
-            g.FillPath(brush, blob);
+            TextRenderer.DrawText(g, "Press any button to see what the game gets", big, new Rectangle(0, 0, Width, line1), Theme.Muted,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
-        if (Picture is { } pic)
+        else
         {
-            float h = Height * 1.05f;
-            float w = h * pic.Width / pic.Height;
-            var dest = new RectangleF(Width - w * 0.92f, Height * 0.08f, w, h);
-            using var attrs = new ImageAttributes();
-            attrs.SetColorMatrix(new ColorMatrix { Matrix33 = 0.92f });
-            g.DrawImage(pic, Rectangle.Round(dest), 0, 0, pic.Width, pic.Height, GraphicsUnit.Pixel, attrs);
+            // [from]  →  (to)   centered as one group
+            using var badgeFont = new Font("Segoe UI Semibold", 9f);
+            var fromSize = TextRenderer.MeasureText(_from, big);
+            var toText = TextRenderer.MeasureText(_to, badgeFont);
+            int arrowW = LogicalToDeviceUnits(34);
+            int badgeH = LogicalToDeviceUnits(24);
+            int badgeW = _round ? badgeH : toText.Width + LogicalToDeviceUnits(16);
+            int total = fromSize.Width + arrowW + badgeW;
+            int x = (Width - total) / 2;
+            TextRenderer.DrawText(g, _from, big, new Rectangle(x, 0, fromSize.Width, line1), Theme.Text, TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
+            x += fromSize.Width;
+            using (var icon = Theme.IconFont(10f))
+                TextRenderer.DrawText(g, "", icon, new Rectangle(x, 0, arrowW, line1), Theme.Muted, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+            x += arrowW;
+            var badge = new RectangleF(x, (line1 - badgeH) / 2f, badgeW, badgeH);
+            using (var path = Theme.RoundedRect(badge, badgeH / 2f))
+            using (var fill = new SolidBrush(_toColor))
+                g.FillPath(fill, path);
+            TextRenderer.DrawText(g, _to, badgeFont, Rectangle.Round(badge), Color.White,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPrefix);
         }
-        g.Restore(state);
-        using (var pen = new Pen(Outline))
-            g.DrawPath(pen, path);
-
-        int pad = LogicalToDeviceUnits(22);
-        var badge = new RectangleF(pad, Height - LogicalToDeviceUnits(84), LogicalToDeviceUnits(46), LogicalToDeviceUnits(46));
-        using (var badgePath = Theme.RoundedRect(badge, LogicalToDeviceUnits(10)))
-        using (var badgeFill = new SolidBrush(Color.FromArgb(200, 0x1A, 0x14, 0x2C)))
-        using (var badgePen = new Pen(Color.FromArgb(150, Theme.Accent), 1.5f))
-        {
-            g.FillPath(badgeFill, badgePath);
-            g.DrawPath(badgePen, badgePath);
-        }
-        using (var icon = Theme.IconFont(16f))
-            TextRenderer.DrawText(g, Theme.Glyph.Controller, icon, Rectangle.Round(badge), Color.White, TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
-
-        int tx = (int)badge.Right + LogicalToDeviceUnits(14);
-        using var big = new Font("Segoe UI Semibold", 20f);
-        using var tag = new Font("Segoe UI", 9.5f);
-        TextRenderer.DrawText(g, "Joyy", big, new Point(tx, (int)badge.Y - LogicalToDeviceUnits(12)), Color.White);
-        TextRenderer.DrawText(g, "Play Xbox-only games with your DualSense.", tag, new Point(tx + 2, (int)badge.Y + LogicalToDeviceUnits(26)), Color.FromArgb(0xE0, 0xD8, 0xF5));
-
-        if (_status.Length > 0)
-        {
-            using var chipFont = new Font("Segoe UI Semibold", 8.75f);
-            var size = TextRenderer.MeasureText(_status, chipFont);
-            var chip = new RectangleF(pad, pad, size.Width + LogicalToDeviceUnits(34), LogicalToDeviceUnits(28));
-            using (var chipPath = Theme.RoundedRect(chip, chip.Height / 2))
-            using (var chipFill = new SolidBrush(Color.FromArgb(170, 0x14, 0x10, 0x24)))
-                g.FillPath(chipFill, chipPath);
-            using (var dot = new SolidBrush(_statusColor))
-                g.FillEllipse(dot, chip.X + LogicalToDeviceUnits(11), chip.Y + chip.Height / 2 - LogicalToDeviceUnits(4), LogicalToDeviceUnits(8), LogicalToDeviceUnits(8));
-            TextRenderer.DrawText(g, _status, chipFont, new Rectangle((int)chip.X + LogicalToDeviceUnits(25), (int)chip.Y, size.Width + 6, (int)chip.Height), Color.White, TextFormatFlags.VerticalCenter);
-        }
+        TextRenderer.DrawText(g, _detail, small, new Rectangle(0, line1 + LogicalToDeviceUnits(4), Width, LogicalToDeviceUnits(20)), Theme.Muted,
+            TextFormatFlags.HorizontalCenter | TextFormatFlags.EndEllipsis | TextFormatFlags.NoPrefix);
     }
 }
 
+/// <summary>
+/// Home: the DualSense large in the middle (live, pressed buttons glow), what the last button
+/// press sends to the game underneath, and the features as status tiles at the bottom.
+/// </summary>
 internal sealed class HomePage : Page
 {
-    readonly Label _name = new() { AutoSize = false, Height = 24, ForeColor = Theme.Text, BackColor = Theme.Card, Font = new Font("Segoe UI Semibold", 10.5f) };
-    readonly Label _serial = new() { AutoSize = false, Height = 20, ForeColor = Theme.Muted, BackColor = Theme.Card, Font = new Font("Segoe UI", 8.5f) };
-    readonly PadView _pad = new(PadView.PadKind.DualSense) { Height = 200 };
-    readonly Segmented _virtual = new("Off", "Xbox 360");
-    readonly ActionRow _hideRow;
-    readonly ToggleSwitch _hide;
-    readonly ActionRow _profileRow = new(Theme.Glyph.Profiles, "Active profile", "", chevron: true);
-    readonly ActionRow _rumbleRow = new(Theme.Glyph.Vibrate, "Test rumble", "Buzz the DualSense", chevron: false);
-    readonly HeroBanner _hero = new() { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 0, 12) };
-    bool _loading;
-
-    public HomePage(ShellContext ctx) : base(ctx, "Home", "Overview and quick actions")
+    static readonly Dictionary<PhysicalButton, string> Names = new()
     {
-        (_hideRow, _hide) = ToggleRow(Theme.Glyph.Hide, "Hide DualSense from games", "Only Joyy can see it");
+        [PhysicalButton.Cross] = "Cross", [PhysicalButton.Circle] = "Circle",
+        [PhysicalButton.Square] = "Square", [PhysicalButton.Triangle] = "Triangle",
+        [PhysicalButton.L1] = "L1", [PhysicalButton.R1] = "R1", [PhysicalButton.L3] = "L3", [PhysicalButton.R3] = "R3",
+        [PhysicalButton.Options] = "Options", [PhysicalButton.Create] = "Create", [PhysicalButton.PS] = "PS",
+        [PhysicalButton.Touchpad] = "Touchpad", [PhysicalButton.Mute] = "Mute",
+        [PhysicalButton.DpadUp] = "D-pad up", [PhysicalButton.DpadDown] = "D-pad down",
+        [PhysicalButton.DpadLeft] = "D-pad left", [PhysicalButton.DpadRight] = "D-pad right",
+    };
 
-        var grid = Grid(2, -360, 100);
-        grid.RowCount = 1;
-        grid.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+    readonly PadView _pad = new(PadView.PadKind.DualSense) { Dock = DockStyle.Fill };
+    readonly MappingReadout _readout = new() { Dock = DockStyle.Bottom };
+    readonly Tile _tController = new(Theme.Glyph.Controller, "My controller", "");
+    readonly Tile _tMapping = new(Theme.Glyph.Mapping, "Button mapping", "");
+    readonly Tile _tSticks = new(Theme.Glyph.Sticks, "Sticks and triggers", "");
+    readonly Tile _tProfiles = new(Theme.Glyph.Profiles, "Profiles", "");
+    readonly Tile _tHide = new(Theme.Glyph.Hide, "Hide DualSense", "");
+    readonly Tile _tSettings = new(Theme.Glyph.Settings, "Settings", "");
+    uint _lastButtons;
+    PhysicalButton? _lastPressed;
+    long _lastSlow;
+    bool _hadDevice;
 
-        var left = new RoundCard { Dock = DockStyle.Fill, Margin = new Padding(0, 0, 14, 0), Padding = new Padding(16, 12, 16, 10) };
-        _pad.BackColor = Theme.Card;
-        StackTop(left, _name, _serial, _pad, Spacer(6), Caption("Virtual device"), _virtual, Spacer(10),
-            Caption("Quick actions"), _hideRow, _profileRow, _rumbleRow);
-        grid.Controls.Add(left, 0, 0);
-
-        var right = Grid(1, 100);
-        right.RowCount = 2;
-        right.RowStyles.Add(new RowStyle(SizeType.Absolute, 230));
-        right.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        right.Controls.Add(_hero, 0, 0);
+    public HomePage(ShellContext ctx) : base(ctx, "Home", "")
+    {
+        _pad.BackColor = Theme.Background;
 
         var tiles = Grid(3, 33.3f, 33.3f, 33.4f);
-        tiles.RowCount = 3;
-        tiles.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
-        tiles.RowStyles.Add(new RowStyle(SizeType.Absolute, 74));
-        tiles.RowStyles.Add(new RowStyle(SizeType.Percent, 100)); // takes the leftover height so tiles keep their size
-        void AddTile(string glyph, string title, string sub, string page, int col, int row)
+        tiles.Dock = DockStyle.Bottom;
+        tiles.Height = 152;
+        tiles.RowCount = 2;
+        tiles.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        tiles.RowStyles.Add(new RowStyle(SizeType.Absolute, 72));
+        void Add(Tile t, string page, int col, int row)
         {
-            var t = new Tile(glyph, title, sub) { Dock = DockStyle.Fill };
+            t.Dock = DockStyle.Fill;
+            t.Margin = new Padding(col == 0 ? 0 : 5, 0, col == 2 ? 0 : 5, 8);
             t.Click += (_, _) => Ctx.Navigate(page);
             tiles.Controls.Add(t, col, row);
         }
-        AddTile(Theme.Glyph.Controller, "My Controller", "Connection and device details", "controller", 0, 0);
-        AddTile(Theme.Glyph.Profiles, "Profiles", "All games and per-game profiles", "profiles", 1, 0);
-        AddTile(Theme.Glyph.Mapping, "Button Mapping", "Choose what each button sends", "mapping", 2, 0);
-        AddTile(Theme.Glyph.Sticks, "Sticks & Triggers", "Deadzones, curves and rumble", "sticks", 0, 1);
-        AddTile(Theme.Glyph.Hide, "Hide DualSense", "Stop double controllers", "hide", 1, 1);
-        AddTile(Theme.Glyph.Log, "Log", "What Joyy has been doing", "log", 2, 1);
-        right.Controls.Add(tiles, 0, 1);
-        grid.Controls.Add(right, 1, 0);
-        Controls.Add(grid);
+        Add(_tController, "controller", 0, 0);
+        Add(_tMapping, "mapping", 1, 0);
+        Add(_tSticks, "sticks", 2, 0);
+        Add(_tProfiles, "profiles", 0, 1);
+        Add(_tHide, "hide", 1, 1);
+        Add(_tSettings, "settings", 2, 1);
 
-        _virtual.SelectionChanged += i =>
-        {
-            if (!_loading)
-                Ctx.Actions.SetVirtualDevice(i == 1);
-        };
-        _hide.CheckedChanged += (_, _) =>
-        {
-            if (!_loading)
-                Ctx.Actions.SetHideDualSense(_hide.Checked);
-        };
-        _profileRow.Click += (_, _) => Ctx.Navigate("profiles");
-        _rumbleRow.Click += (_, _) => Ctx.Actions.TestRumble(Ctx.Live.Active.RumbleScale);
-        Ctx.SkinsChanged += ApplySkins;
-        ApplySkins();
-    }
+        var divider = new Panel { Dock = DockStyle.Bottom, Height = 1, BackColor = Theme.Border };
+        var gap = new Panel { Dock = DockStyle.Bottom, Height = 14, BackColor = Color.Transparent };
 
-    void ApplySkins()
-    {
+        // Fill first, then the bottom-docked pieces from the bottom up.
+        Controls.Add(_pad);
+        Controls.Add(_readout);
+        Controls.Add(gap);
+        Controls.Add(divider);
+        Controls.Add(new Panel { Dock = DockStyle.Bottom, Height = 12, BackColor = Color.Transparent });
+        Controls.Add(tiles);
+
+        Ctx.SkinsChanged += () => Ctx.ApplySkins(_pad);
         Ctx.ApplySkins(_pad);
-        _hero.Picture = Ctx.XboxSkin?.Image;
-        _hero.Invalidate();
+        Ctx.Session.Changed += () => UpdateEditingTiles(Ctx.Live.Active);
     }
 
     public override void OnLive(in LiveView live)
     {
         var s = live.Snapshot;
-        _pad.SetState(s.Input, s.Output, s.Running && s.Device is not null);
-        _name.Text = s.Device?.Name ?? "No controller connected";
-        _serial.Text = s.Device is { } d ? $"{StatusView.Connection(d.Connection)}  ·  {d.Serial ?? "no serial"}" : "Connect a DualSense with USB or Bluetooth";
-        _hero.SetStatus(live.Status.Title, live.Status.Color);
-        string profile = ProfileSession.NameOf(live.Active);
-        if (_profileRow.Value != profile)
+        bool connected = s.Running && s.Device is not null;
+        _pad.SetState(s.Input, s.Output, connected);
+
+        // Remember the most recently pressed button (or a trigger pull) for the readout.
+        uint pressed = s.Input.Buttons & ~_lastButtons;
+        _lastButtons = s.Input.Buttons;
+        if (pressed != 0)
         {
-            _profileRow.Value = profile;
-            _profileRow.Invalidate();
+            foreach (var b in Enum.GetValues<PhysicalButton>())
+            {
+                if ((pressed & PhysicalButtons.Bit(b)) != 0)
+                {
+                    _lastPressed = b;
+                    break;
+                }
+            }
         }
-        _loading = true;
-        _virtual.Selected = live.HostRunning ? 1 : 0;
-        _loading = false;
+
+        string detail = s.Device is { } d
+            ? $"{d.Name}  ·  {StatusView.Connection(d.Connection)}"
+            : live.HostRunning ? "Connect your DualSense with USB or Bluetooth" : "Paused: the virtual Xbox controller is unplugged";
+        var map = ButtonMap.Create(live.Active.NintendoLayout, live.Active.ButtonOverrides);
+        if (connected && s.Input.L2 > 40)
+            _readout.Set("L2", "LT", Theme.Raised, false, detail);
+        else if (connected && s.Input.R2 > 40)
+            _readout.Set("R2", "RT", Theme.Raised, false, detail);
+        else if (connected && _lastPressed is { } b)
+        {
+            var target = map[b];
+            var (label, color, round) = Describe(target);
+            _readout.Set(Names[b], label, color, round, detail);
+        }
+        else
+            _readout.Set("", "", Theme.Raised, false, detail);
+
+        // Poll rate jitters every frame, so the tile text refreshes a few times a second (or at once on plug/unplug).
+        if (Environment.TickCount64 - _lastSlow > 400 || (s.Device is not null) != _hadDevice)
+        {
+            _hadDevice = s.Device is not null;
+            _lastSlow = Environment.TickCount64;
+            _tController.SetSubtitle(s.Device is { } dev ? $"{StatusView.Connection(dev.Connection)} · {s.PollRate:0} Hz" : "Not connected",
+                s.Device is null ? Theme.Muted : null);
+            UpdateEditingTiles(live.Active);
+        }
+    }
+
+    void UpdateEditingTiles(Profile active)
+    {
+        int custom = active.ButtonOverrides.Count;
+        _tMapping.SetSubtitle(custom > 0 ? $"{custom} custom button{(custom == 1 ? "" : "s")}"
+            : active.NintendoLayout ? "Nintendo layout" : "Default layout");
+        _tSticks.SetSubtitle($"Deadzone {active.StickDeadzone * 100:0}%  ·  rumble {active.RumbleScale * 100:0}%");
+        int games = Ctx.Session.Profiles.Count - 1;
+        _tProfiles.SetSubtitle($"Using {ProfileSession.NameOf(active)}  ·  {games} game profile{(games == 1 ? "" : "s")}");
     }
 
     public override void OnEnvironment(EnvView env)
     {
-        _loading = true;
-        _hide.SetSilently(env.HideEnabled);
-        _hideRow.Enabled = env.HidHideInstalled;
-        _hideRow.SetContent(Theme.Glyph.Hide, "Hide DualSense from games",
-            !env.HidHideInstalled ? "Needs the HidHide driver" : env.ReplugNeeded ? "Replug the DualSense once" : env.HidingActive ? "Hidden: games see only Xbox" : "Only Joyy can see it");
-        _loading = false;
+        if (!env.HidHideInstalled)
+            _tHide.SetSubtitle("Needs the HidHide driver", Theme.Warn);
+        else if (!env.HideEnabled)
+            _tHide.SetSubtitle("Off · games may see 2 pads", Theme.Warn);
+        else if (env.ReplugNeeded)
+            _tHide.SetSubtitle("Replug the DualSense once", Theme.Warn);
+        else if (env.HidingActive)
+            _tHide.SetSubtitle("On · games see 1 pad", Theme.Good);
+        else
+            _tHide.SetSubtitle("On · waiting for the DualSense");
+        _tSettings.SetSubtitle(env.StartWithWindows ? "Starts with Windows" : "Starts when you open it");
     }
+
+    static (string Label, Color Color, bool Round) Describe(X360Buttons target) => target switch
+    {
+        X360Buttons.A => ("A", Theme.XbA, true),
+        X360Buttons.B => ("B", Theme.XbB, true),
+        X360Buttons.X => ("X", Theme.XbX, true),
+        X360Buttons.Y => ("Y", Color.FromArgb(0xC9, 0x9A, 0x10), true),
+        X360Buttons.None => ("nothing", Theme.Raised, false),
+        X360Buttons.LeftShoulder => ("LB", Theme.Raised, false),
+        X360Buttons.RightShoulder => ("RB", Theme.Raised, false),
+        X360Buttons.LeftThumb => ("LS", Theme.Raised, false),
+        X360Buttons.RightThumb => ("RS", Theme.Raised, false),
+        X360Buttons.DpadUp => ("D-pad up", Theme.Raised, false),
+        X360Buttons.DpadDown => ("D-pad down", Theme.Raised, false),
+        X360Buttons.DpadLeft => ("D-pad left", Theme.Raised, false),
+        X360Buttons.DpadRight => ("D-pad right", Theme.Raised, false),
+        _ => (target.ToString(), Theme.Raised, false),
+    };
 }
+
 
 // ---------------------------------------------------------------------------------------- My Controller
 
@@ -427,16 +465,16 @@ internal sealed class SettingsPage : Page
 
         var folders = new RoundCard { Height = 204, Padding = new Padding(16, 10, 16, 6) };
         var cfg = new ActionRow(Theme.Glyph.Edit, "Open config.json", "Profiles and settings (edits are picked up live)");
-        var logs = new ActionRow(Theme.Glyph.Folder, "Open log folder", "Daily logs, kept for 7 days");
+        var logs = new ActionRow(Theme.Glyph.Log, "View log", "What Joyy did and when; daily log files are kept for 7 days");
         var photos = new ActionRow(Theme.Glyph.Folder, "Open photos folder", "Where the controller photos are kept");
         cfg.Click += (_, _) => Ctx.Actions.OpenConfigFile();
-        logs.Click += (_, _) => Ctx.Actions.OpenLogFolder();
+        logs.Click += (_, _) => Ctx.Navigate("log");
         photos.Click += (_, _) =>
         {
             Directory.CreateDirectory(PhotoSkin.Folder);
             Process.Start(new ProcessStartInfo("explorer.exe", $"\"{PhotoSkin.Folder}\"") { UseShellExecute = true })?.Dispose();
         };
-        StackTop(folders, CardTitle("Files"), cfg, logs, photos);
+        StackTop(folders, CardTitle("Files"), logs, cfg, photos);
 
         var about = new RoundCard { Height = 138, Padding = new Padding(16, 10, 16, 8) };
         string version = typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";

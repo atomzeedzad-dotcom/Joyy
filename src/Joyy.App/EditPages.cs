@@ -430,7 +430,7 @@ internal sealed class SticksPage : Page
         var previews = new FlowLayoutPanel { Height = 236, BackColor = Theme.Card, WrapContents = false };
         previews.Controls.Add(_left);
         previews.Controls.Add(_right);
-        var legend = Body("White: your input  ·  Pink: game gets  ·  Red: deadzone  ·  Green: full tilt", 20);
+        var legend = Body("White: your input  ·  Blue: game gets  ·  Red: deadzone  ·  Green: full tilt", 20);
         StackTop(sticks, CardTitle("Sticks"), previews, legend, Spacer(4),
             Body("Deadzone: movement ignored around the center (removes drift)", 18), _deadzone,
             Body("Full tilt at: how far you push to reach 100%", 18), _saturation, Spacer(6),

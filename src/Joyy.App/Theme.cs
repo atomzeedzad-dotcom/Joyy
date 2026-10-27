@@ -7,21 +7,23 @@ namespace Joyy.App;
 internal static partial class Theme
 {
     // Window background: a purple-to-navy diagonal gradient; content sits on rounded cards.
-    public static readonly Color BgTop = Color.FromArgb(0x2A, 0x1C, 0x3D);
-    public static readonly Color BgBottom = Color.FromArgb(0x10, 0x16, 0x2A);
-    public static readonly Color Background = Color.FromArgb(0x1A, 0x18, 0x2E);
-    public static readonly Color Card = Color.FromArgb(0x26, 0x20, 0x38);
-    public static readonly Color Raised = Color.FromArgb(0x31, 0x29, 0x46);
-    public static readonly Color Hover = Color.FromArgb(0x38, 0x2F, 0x50);
-    public static readonly Color Border = Color.FromArgb(0x3D, 0x34, 0x55);
-    public static readonly Color Text = Color.FromArgb(0xEE, 0xEA, 0xF5);
-    public static readonly Color Muted = Color.FromArgb(0xA6, 0x9C, 0xBA);
-    public static readonly Color Accent = Color.FromArgb(0xE2, 0x6B, 0xE0);   // pink-violet, buttons/toggles/selection
+    // Black theme: near-black window, dark-gray cards, white text. The only color comes from the
+    // DualSense light-bar blue (selection, toggles, primary buttons) and status green/amber/red.
+    public static readonly Color BgTop = Color.FromArgb(0x05, 0x05, 0x05);
+    public static readonly Color BgBottom = Color.FromArgb(0x05, 0x05, 0x05);
+    public static readonly Color Background = Color.FromArgb(0x05, 0x05, 0x05);
+    public static readonly Color Card = Color.FromArgb(0x11, 0x11, 0x11);
+    public static readonly Color Raised = Color.FromArgb(0x1A, 0x1A, 0x1A);
+    public static readonly Color Hover = Color.FromArgb(0x22, 0x22, 0x22);
+    public static readonly Color Border = Color.FromArgb(0x26, 0x26, 0x26);
+    public static readonly Color Text = Color.FromArgb(0xF2, 0xF2, 0xF2);
+    public static readonly Color Muted = Color.FromArgb(0x8A, 0x8A, 0x8A);
+    public static readonly Color Accent = Color.FromArgb(0x4C, 0x8D, 0xFF);   // light-bar blue: buttons, toggles, selection
     public static readonly Color PsBlue = Color.FromArgb(0x4C, 0x8D, 0xFF);   // DualSense highlights
     public static readonly Color Good = Color.FromArgb(0x3D, 0xD6, 0x8C);
     public static readonly Color Warn = Color.FromArgb(0xF5, 0xB1, 0x4C);
     public static readonly Color Bad = Color.FromArgb(0xFF, 0x6B, 0x6B);
-    public static readonly Color Idle = Color.FromArgb(0x7D, 0x74, 0x92);
+    public static readonly Color Idle = Color.FromArgb(0x6E, 0x6E, 0x6E);
 
     /// <summary>Windows 11 icon font, falling back to the Windows 10 one.</summary>
     public static readonly FontFamily IconFamily = PickIconFamily();
@@ -74,7 +76,7 @@ internal static partial class Theme
     {
         if (bounds.Width <= 0 || bounds.Height <= 0)
             return;
-        using var brush = new LinearGradientBrush(bounds, BgTop, BgBottom, 35f);
+        using var brush = new SolidBrush(Background);
         g.FillRectangle(brush, bounds);
     }
 

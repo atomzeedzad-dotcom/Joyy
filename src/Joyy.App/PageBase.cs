@@ -1,4 +1,4 @@
-﻿using System.Drawing.Drawing2D;
+using System.Drawing.Drawing2D;
 using Joyy.Core;
 using Joyy.Platform;
 
@@ -62,7 +62,7 @@ internal abstract class Page : Panel
         SetStyle(ControlStyles.SupportsTransparentBackColor | ControlStyles.OptimizedDoubleBuffer, true);
         BackColor = Color.Transparent;
         Dock = DockStyle.Fill;
-        Padding = new Padding(0, 0, 22, 20);
+        Padding = new Padding(0, 0, 0, 20);
         Title = title;
         Subtitle = subtitle;
     }
