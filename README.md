@@ -29,7 +29,10 @@ Requires the .NET 8 SDK and, at runtime, the ViGEmBus driver.
 ## Install
 
 `tools\publish.ps1` builds `artifacts\publish\Joyy.exe`: one self-contained file (no .NET
-install needed). Double-click it and it offers to install itself:
+install needed) that also carries the HidHide installer. The first publish needs that installer
+in `deps\` (kept out of git): `toolsetch-deps.ps1 -Download` fetches it from the official
+release, or `-From <path>` uses a copy you have; either way it must match the pinned SHA-256.
+Double-click Joyy.exe and it offers to install itself:
 
 - copies Joyy to `%LOCALAPPDATA%\Programs\Joyy` (no administrator rights),
 - adds **Joyy** to the Start menu, so typing "Joyy" in Windows search finds it,
@@ -85,6 +88,10 @@ button that pauses/resumes the virtual controller.
 | `xinput` | List controllers exactly as an XInput game sees them (`--rumble` pulses the first) |
 
 ## Hiding the DualSense (HidHide)
+
+No separate download: if HidHide is missing, open **Hide DualSense** and click
+**Install HidHide**. Joyy runs the copy of HidHide 1.5.230 bundled inside it (MIT license,
+see `THIRD-PARTY-NOTICES.md`); Windows asks for administrator permission once.
 
 With [HidHide](https://github.com/nefarius/HidHide/releases) installed, Joyy hides the
 physical DualSense from every program except itself, so games see only the Xbox 360

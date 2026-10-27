@@ -5,6 +5,9 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $out = Join-Path $root 'artifacts\publish'
 
+# The HidHide installer is bundled into Joyy.exe; make sure the verified copy is in deps\.
+& (Join-Path $PSScriptRoot 'fetch-deps.ps1')
+
 if (Test-Path $out) { Remove-Item $out -Recurse -Force }
 dotnet publish (Join-Path $root 'src\Joyy.App\Joyy.App.csproj') -c $Configuration -r win-x64 `
     -p:JoyyPublished=true -o $out --nologo

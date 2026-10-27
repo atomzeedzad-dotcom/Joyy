@@ -8,3 +8,5 @@ TestResults/
 *.suo
 # Official product photos: for personal use on this PC, not for redistribution.
 photos/
+# Third-party installers bundled at publish time (tools\fetch-deps.ps1).
+deps/

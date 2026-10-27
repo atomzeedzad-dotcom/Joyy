@@ -43,6 +43,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- HidHide's installer rides inside Joyy.exe so nobody downloads it separately (tools\fetch-deps.ps1 puts it in deps\). -->
+    <EmbeddedResource Include="..\..\deps\HidHide_1.5.230_x64.exe" LogicalName="HidHideSetup.exe" Condition="Exists('..\..\deps\HidHide_1.5.230_x64.exe')" />
+    <EmbeddedResource Include="..\..\THIRD-PARTY-NOTICES.md" LogicalName="ThirdPartyNotices.txt" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Joyy.Platform\Joyy.Platform.csproj" />
   </ItemGroup>
 

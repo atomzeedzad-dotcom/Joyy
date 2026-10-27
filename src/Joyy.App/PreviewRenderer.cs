@@ -64,6 +64,20 @@ internal static class PreviewRenderer
             form.DrawToBitmap(bitmap, new Rectangle(Point.Empty, form.Size));
             bitmap.Save(Path.Combine(folder, $"window-{page}.png"), System.Drawing.Imaging.ImageFormat.Png);
         }
+
+        // A PC without HidHide: the Hide page offers the bundled installer.
+        form.SetEnvironment(env with
+        {
+            Hiding = new HidingView("Off. Games can also see the DualSense itself, which may cause double input. Install HidHide to fix this.", false, true, true),
+            HidHideInstalled = false, HidingActive = false,
+        });
+        form.ShowPage("hide");
+        Application.DoEvents();
+        using (var missing = new Bitmap(form.Width, form.Height))
+        {
+            form.DrawToBitmap(missing, new Rectangle(Point.Empty, form.Size));
+            missing.Save(Path.Combine(folder, "window-hide-missing.png"), System.Drawing.Imaging.ImageFormat.Png);
+        }
         form.CloseForReal();
     }
 
@@ -75,6 +89,7 @@ internal static class PreviewRenderer
         public void SetStartWithWindows(bool enabled) { }
         public void SetStartMinimized(bool enabled) { }
         public void SetHideDualSense(bool enabled) { }
+        public Task<string?> InstallHidHideAsync() => Task.FromResult<string?>(null);
         public void TestRumble(double strength) { }
         public void OpenLogFolder() { }
         public void OpenConfigFile() { }

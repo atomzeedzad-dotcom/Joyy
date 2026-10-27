@@ -14,6 +14,8 @@ internal interface IAppActions
     void SetStartWithWindows(bool enabled);
     void SetStartMinimized(bool enabled);
     void SetHideDualSense(bool enabled);
+    /// <summary>Runs the HidHide installer bundled in Joyy.exe; null when it worked, else what went wrong.</summary>
+    Task<string?> InstallHidHideAsync();
     void TestRumble(double strength);
     void OpenLogFolder();
     void OpenConfigFile();

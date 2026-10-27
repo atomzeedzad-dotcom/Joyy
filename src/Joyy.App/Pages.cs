@@ -345,7 +345,9 @@ internal sealed class HidePage : Page
     readonly CheckLine _driver = new("HidHide driver");
     readonly CheckLine _attached = new("Attached to your DualSense");
     readonly CheckLine _hidden = new("Games see only the Xbox controller");
-    readonly PillButton _install = new("Install HidHide", primary: true, glyph: Theme.Glyph.Link);
+    readonly PillButton _install = HidHideSetup.Bundled
+        ? new("Install HidHide", primary: true, glyph: Theme.Glyph.Shield)
+        : new("Get HidHide", primary: true, glyph: Theme.Glyph.Link);
     bool _loading;
 
     public HidePage(ShellContext ctx) : base(ctx, "Hide DualSense", "Stop games from seeing two controllers")
@@ -376,7 +378,20 @@ internal sealed class HidePage : Page
             if (!_loading)
                 Ctx.Actions.SetHideDualSense(_toggle.Checked);
         };
-        _install.Click += (_, _) => Process.Start(new ProcessStartInfo(DependencyChecker.HidHideUrl) { UseShellExecute = true })?.Dispose();
+        _install.Click += async (_, _) =>
+        {
+            if (!HidHideSetup.Bundled)
+            {
+                Process.Start(new ProcessStartInfo(DependencyChecker.HidHideUrl) { UseShellExecute = true })?.Dispose();
+                return;
+            }
+            _install.Enabled = false;
+            _detail.Text = "Installing HidHide… Windows will ask for permission.";
+            string? error = await Ctx.Actions.InstallHidHideAsync();
+            _install.Enabled = true;
+            if (error is not null)
+                _detail.Text = $"HidHide was not installed: {error}";
+        };
     }
 
     public override void OnEnvironment(EnvView env)
@@ -480,7 +495,7 @@ internal sealed class SettingsPage : Page
         string version = typeof(SettingsPage).Assembly.GetName().Version?.ToString(3) ?? "1.0.0";
         StackTop(about, CardTitle($"About Joyy {version}"),
             Body("Turns a PS5 DualSense into an Xbox 360 controller for games that only support Xbox, with buttons matched by position.", 22),
-            Body("Built on SDL2 (input), ViGEmBus (virtual controller) and HidHide (device hiding) by Nefarius Software Solutions.", 22),
+            Body("Built on SDL2 (input), ViGEmBus (virtual controller) and HidHide (device hiding, installer included; MIT license) by Nefarius Software Solutions.", 22),
             Body("Controller photos are the makers' product images, used locally for display only.", 22));
 
         StackTop(this, general, Spacer(10, Color.Transparent), pictures, Spacer(10, Color.Transparent), folders, Spacer(10, Color.Transparent), about);

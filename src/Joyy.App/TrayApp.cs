@@ -25,7 +25,7 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
     readonly ToolStripMenuItem _menuProfile = new() { Enabled = false };
     readonly ToolStripMenuItem _menuPause = new("Pause");
     readonly ToolStripMenuItem _menuHide = new("Hide DualSense from games") { CheckOnClick = false };
-    readonly DeviceHider? _hider;
+    DeviceHider? _hider;
     readonly object _hidingGate = new();
     Task _hidingWork = Task.CompletedTask;
     volatile string? _hidingError;
@@ -55,9 +55,7 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
         _form.HiddenToTray += OnHiddenToTray;
         _form.Session.Load(_config);
 
-        if (HidHideCli.Locate() is { } hidHideCli)
-            _hider = new DeviceHider(new HidHideCli(hidHideCli, m => _log.Write("HIDHIDE", m)),
-                Environment.ProcessPath ?? Application.ExecutablePath);
+        AttachHidHide();
 
         _host = new BridgeHost(ProfileSelector.Select(_config, null));
         _host.Event += e => _ui.Post(_ => Report(e.Kind, e.Message), null);
@@ -73,6 +71,8 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
             Report(HostEventKind.Warning, $"Could not read config, using defaults (file left untouched): {configError}");
         if (!_viGEmInstalled)
             Report(HostEventKind.Error, $"ViGEmBus driver not found. Install it from {DependencyChecker.ViGEmBusUrl}");
+        if (_hider is null && HidHideSetup.Bundled)
+            Report(HostEventKind.Warning, "HidHide is not installed, so games may see two controllers. Open Hide DualSense and click Install HidHide.");
 
         _timer.Tick += (_, _) => OnTick();
         _timer.Start();
@@ -121,6 +121,36 @@ internal sealed class TrayApp : ApplicationContext, IAppActions
 
     public string? SaveProfiles(Profile global, IReadOnlyList<Profile> games) =>
         SaveConfig(_config with { Global = global, Games = games });
+
+    bool AttachHidHide()
+    {
+        if (_hider is null && HidHideCli.Locate() is { } hidHideCli)
+            _hider = new DeviceHider(new HidHideCli(hidHideCli, m => _log.Write("HIDHIDE", m)),
+                Environment.ProcessPath ?? Application.ExecutablePath);
+        return _hider is not null;
+    }
+
+    public async Task<string?> InstallHidHideAsync()
+    {
+        _log.Write("INFO", $"Installing the bundled HidHide {HidHideSetup.Version}");
+        var result = await HidHideSetup.InstallAsync();
+        if (!result.Installed)
+        {
+            Report(HostEventKind.Warning, $"HidHide was not installed: {result.Error}");
+            return result.Error;
+        }
+        if (!AttachHidHide())
+        {
+            Report(HostEventKind.Warning, "HidHide installed, but Joyy cannot find it yet; restart Windows to finish");
+            return "installed; restart Windows to finish";
+        }
+        Report(HostEventKind.Info, result.RestartNeeded
+            ? "HidHide installed; restart Windows to finish setting it up"
+            : "HidHide installed; unplug and replug the DualSense once so it can be hidden");
+        RefreshEnvironment();
+        QueueHiding(recover: true);
+        return null;
+    }
 
     public void SetHideDualSense(bool enabled)
     {

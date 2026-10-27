@@ -145,6 +145,14 @@ internal static class Installer
 
         foreach (var f in files.Distinct(StringComparer.OrdinalIgnoreCase))
             File.Copy(f, Path.Combine(InstallDir, Path.GetFileName(f)), overwrite: true);
+
+        // License of the bundled HidHide installer, next to the exe.
+        using var notices = typeof(Installer).Assembly.GetManifestResourceStream("ThirdPartyNotices.txt");
+        if (notices is not null)
+        {
+            using var file = File.Create(Path.Combine(InstallDir, "THIRD-PARTY-NOTICES.txt"));
+            notices.CopyTo(file);
+        }
     }
 
     static void CreateShortcut()
