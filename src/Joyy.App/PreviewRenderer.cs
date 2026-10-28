@@ -1,4 +1,4 @@
-using Joyy.Core;
+﻿using Joyy.Core;
 
 namespace Joyy.App;
 
@@ -28,8 +28,26 @@ internal static class PreviewRenderer
         Render(Path.Combine(folder, "pads-rest.png"), PadState.Neutral, mapper.Map(PadState.Neutral));
         Render(Path.Combine(folder, "pads-pressed.png"), held, mapper.Map(held));
         Render(Path.Combine(folder, "pads-all.png"), everything, mapper.Map(everything));
+        RenderDrawing(Path.Combine(folder, "drawing.png"), new[] { PadState.Neutral, held, everything });
         RenderWindow(folder, held, mapper.Map(held));
         return 0;
+    }
+
+    /// <summary>The built-in (flat) DualSense drawing on the window background, one state per row.</summary>
+    static void RenderDrawing(string path, PadState[] states)
+    {
+        const int w = 900, h = 610;
+        using var bitmap = new Bitmap(w, h * states.Length);
+        using var g = Graphics.FromImage(bitmap);
+        for (int i = 0; i < states.Length; i++)
+        {
+            using var view = new PadView(PadView.PadKind.DualSense) { Size = new Size(w, h), BackColor = Theme.Background, Map = ButtonMap.Create(false) };
+            view.SetState(states[i], default, active: true);
+            using var one = new Bitmap(w, h);
+            view.DrawToBitmap(one, new Rectangle(0, 0, w, h));
+            g.DrawImage(one, 0, i * h);
+        }
+        bitmap.Save(path, System.Drawing.Imaging.ImageFormat.Png);
     }
 
     /// <summary>Every page of the main window, drawn offscreen with a sample connected controller.</summary>

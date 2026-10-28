@@ -1,4 +1,4 @@
-﻿using System.Drawing.Drawing2D;
+using System.Drawing.Drawing2D;
 using Joyy.Core;
 
 namespace Joyy.App;
@@ -260,6 +260,7 @@ internal sealed class MappingPage : Page
 
     void RefreshRows()
     {
+        _pad.Map = Map();
         _loading = true;
         _nintendo.SetSilently(Ctx.Session.Editing.NintendoLayout);
         _loading = false;

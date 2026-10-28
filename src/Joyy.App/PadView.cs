@@ -81,15 +81,15 @@ internal sealed class PadView : Control
     // Positions in the 400x270 design space of the built-in drawings.
     static readonly Dictionary<PhysicalButton, Spot> DsDrawSpots = new()
     {
-        [PhysicalButton.Cross] = new(314, 134, 12), [PhysicalButton.Circle] = new(336, 112, 12),
-        [PhysicalButton.Square] = new(292, 112, 12), [PhysicalButton.Triangle] = new(314, 90, 12),
-        [PhysicalButton.L1] = new(105, 50, 16), [PhysicalButton.R1] = new(295, 50, 16),
-        [PhysicalButton.L3] = new(152, 152, 20), [PhysicalButton.R3] = new(248, 152, 20),
-        [PhysicalButton.Options] = new(271, 70, 8), [PhysicalButton.Create] = new(129, 70, 8),
-        [PhysicalButton.PS] = new(200, 150, 10), [PhysicalButton.Touchpad] = new(200, 83, 26),
-        [PhysicalButton.Mute] = new(200, 171, 7),
-        [PhysicalButton.DpadUp] = new(86, 96, 10), [PhysicalButton.DpadDown] = new(86, 128, 10),
-        [PhysicalButton.DpadLeft] = new(70, 112, 10), [PhysicalButton.DpadRight] = new(102, 112, 10),
+        [PhysicalButton.Cross] = new(314, 131, 12), [PhysicalButton.Circle] = new(337, 108, 12),
+        [PhysicalButton.Square] = new(291, 108, 12), [PhysicalButton.Triangle] = new(314, 85, 12),
+        [PhysicalButton.L1] = new(102, 40, 14), [PhysicalButton.R1] = new(298, 40, 14),
+        [PhysicalButton.L3] = new(152, 156, 20), [PhysicalButton.R3] = new(248, 156, 20),
+        [PhysicalButton.Options] = new(277, 74, 8), [PhysicalButton.Create] = new(123, 74, 8),
+        [PhysicalButton.PS] = new(200, 150, 10), [PhysicalButton.Touchpad] = new(200, 84, 28),
+        [PhysicalButton.Mute] = new(200, 168, 7),
+        [PhysicalButton.DpadUp] = new(86, 92, 10), [PhysicalButton.DpadDown] = new(86, 124, 10),
+        [PhysicalButton.DpadLeft] = new(70, 108, 10), [PhysicalButton.DpadRight] = new(102, 108, 10),
     };
 
     static readonly Dictionary<X360Buttons, Spot> XbDrawSpots = new()
@@ -511,89 +511,293 @@ internal sealed class PadView : Control
 
     // ------------------------------------------------------------------ DualSense
 
+    /// <summary>
+    /// What each DualSense button sends, so a pressed face button lights up in the color of its
+    /// Xbox button (Cross → A shows green). Null: PlayStation blue for everything.
+    /// </summary>
+    [System.ComponentModel.DesignerSerializationVisibility(System.ComponentModel.DesignerSerializationVisibility.Hidden)]
+    public ButtonMap? Map
+    {
+        get => _map;
+        set { _map = value; Invalidate(); }
+    }
+
+    ButtonMap? _map;
+
+    static readonly Color FlatWhite = Color.FromArgb(0xF4, 0xF5, 0xF7);
+    static readonly Color FlatLine = Color.FromArgb(0xC9, 0xCD, 0xD4);
+    static readonly Color FlatBlack = Color.FromArgb(0x16, 0x17, 0x1A);
+    static readonly Color FlatInk = Color.FromArgb(0x1E, 0x20, 0x24);
+    static readonly Color FlatTrigger = Color.FromArgb(0xE5, 0x48, 0x4D);
+    static readonly Color FlatLight = Color.FromArgb(0x2F, 0x7B, 0xFF);
+
+    Color PressColor(PhysicalButton b)
+    {
+        var target = _map?[b] ?? X360Buttons.None;
+        return target switch
+        {
+            X360Buttons.A => Theme.XbA,
+            X360Buttons.B => Theme.XbB,
+            X360Buttons.X => Theme.XbX,
+            X360Buttons.Y => Theme.XbY,
+            _ => Theme.PsBlue,
+        };
+    }
+
+    /// <summary>Flat, illustration-style DualSense: white shell, black core, outlined symbols.</summary>
     void DrawDualSense(Graphics g)
     {
         bool P(PhysicalButton b) => _ds.IsPressed(b);
-        var accent = Theme.PsBlue;
-        var dark = Color.FromArgb(0x1C, 0x1F, 0x25);
 
-        Trigger(g, new RectangleF(76, 26, 60, 30), "L2", _ds.L2, dark, accent);
-        Trigger(g, new RectangleF(264, 26, 60, 30), "R2", _ds.R2, dark, accent);
-        Bumper(g, new RectangleF(72, 42, 66, 16), "L1", P(PhysicalButton.L1), Color.FromArgb(0xE9, 0xEB, 0xEF), accent);
-        Bumper(g, new RectangleF(262, 42, 66, 16), "R1", P(PhysicalButton.R1), Color.FromArgb(0xE9, 0xEB, 0xEF), accent);
+        // Trigger meters at the far sides: a pill that fills as L2/R2 is pulled, plus three ticks.
+        TriggerMeter(g, new RectangleF(10, 34, 13, 44), _ds.L2, ticksRight: true);
+        TriggerMeter(g, new RectangleF(W - 23, 34, 13, 44), _ds.R2, ticksRight: false);
+
+        // Shoulders behind the shell: L2/R2 triggers, then L1/R1 bumpers.
+        FlatShoulder(g, new RectangleF(72, 8, 64, 44), 14, "L2", _ds.L2 > 20, Color.FromArgb(0x2A, 0x2C, 0x31));
+        FlatShoulder(g, new RectangleF(W - 136, 8, 64, 44), 14, "R2", _ds.R2 > 20, Color.FromArgb(0x2A, 0x2C, 0x31));
+        FlatShoulder(g, new RectangleF(62, 32, 80, 28), 10, "L1", P(PhysicalButton.L1), Color.FromArgb(0x3A, 0x3D, 0x44));
+        FlatShoulder(g, new RectangleF(W - 142, 32, 80, 28), 10, "R1", P(PhysicalButton.R1), Color.FromArgb(0x3A, 0x3D, 0x44));
 
         using var body = Mirrored(DualSenseOutline);
-        PaintBody(g, body, Color.FromArgb(0xF7, 0xF8, 0xFA), Color.FromArgb(0xD3, 0xD6, 0xDC));
+        using (var fill = new SolidBrush(FlatWhite))
+            g.FillPath(fill, body);
 
-        // Black center section, clipped to the shell.
+        // Black core between the grips, clipped to the shell.
         var clip = g.Save();
         g.SetClip(body);
         using (var core = new GraphicsPath())
         {
-            core.AddClosedCurve(new PointF[] { new(132, 56), new(268, 56), new(286, 122), new(262, 236), new(138, 236), new(114, 122) }, 0.35f);
-            // Gradient covers the whole core; a shorter one would tile and leave a light band.
-            using var coreFill = new LinearGradientBrush(new RectangleF(110, 50, 180, 200),
-                Color.FromArgb(0x26, 0x29, 0x31), Color.FromArgb(0x0B, 0x0C, 0x0F), LinearGradientMode.Vertical);
+            core.AddClosedCurve(new PointF[] { new(128, 96), new(272, 96), new(294, 140), new(258, 204), new(142, 204), new(106, 140) }, 0.42f);
+            using var coreFill = new SolidBrush(FlatBlack);
             g.FillPath(coreFill, core);
         }
         g.Restore(clip);
+        using (var rim = new Pen(FlatLine, 1.1f))
+            g.DrawPath(rim, body);
 
-        // Touchpad with the light bar along both sides.
-        var pad = new RectangleF(146, 58, 108, 50);
-        if (P(PhysicalButton.Touchpad))
-            GlowRect(g, pad, 10, accent);
-        using (var tp = Theme.RoundedRect(pad, 9))
+        // Touchpad: white, faint dot texture, light bar down both sides.
+        bool touch = P(PhysicalButton.Touchpad);
+        using (var tp = new GraphicsPath())
         {
-            using var tpFill = new LinearGradientBrush(pad,
-                P(PhysicalButton.Touchpad) ? ControlPaint.Light(accent, 0.2f) : Color.FromArgb(0x2B, 0x2F, 0x37),
-                P(PhysicalButton.Touchpad) ? accent : Color.FromArgb(0x17, 0x19, 0x1E), LinearGradientMode.Vertical);
-            using var tpPen = new Pen(Color.FromArgb(0x3A, 0x3F, 0x48), 1f);
+            tp.AddBeziers(new PointF[]
+            {
+                new(138, 56), new(170, 54), new(230, 54), new(262, 56),
+                new(266, 74), new(262, 98), new(252, 110),
+                new(220, 113), new(180, 113), new(148, 110),
+                new(138, 98), new(134, 74), new(138, 56),
+            });
+            tp.CloseFigure();
+            if (touch)
+            {
+                var b = tp.GetBounds();
+                GlowRect(g, b, 8, Theme.PsBlue, 150);
+            }
+            using var tpFill = new SolidBrush(touch ? Color.FromArgb(0xDC, 0xE8, 0xFF) : Color.White);
+            using var tpPen = new Pen(touch ? Theme.PsBlue : FlatLine, touch ? 1.6f : 1f);
             g.FillPath(tpFill, tp);
+            var inner = g.Save();
+            g.SetClip(tp);
+            using (var dot = new SolidBrush(Color.FromArgb(touch ? 90 : 46, FlatInk)))
+                for (float y = 62; y < 110; y += 5)
+                    for (float x = 142 + ((int)((y - 62) / 5) % 2) * 2.5f; x < 260; x += 5)
+                        g.FillEllipse(dot, x - 0.6f, y - 0.6f, 1.2f, 1.2f);
+            g.Restore(inner);
             g.DrawPath(tpPen, tp);
         }
-        foreach (float x in new[] { 140.5f, 256.5f })
+        foreach (bool left in new[] { true, false })
         {
-            var bar = new RectangleF(x, 64, 3, 38);
-            GlowRect(g, bar, 4, Color.FromArgb(0x3B, 0x82, 0xF6), 140);
-            using var barPath = Theme.RoundedRect(bar, 1.5f);
-            using var barBrush = new SolidBrush(Color.FromArgb(0x7F, 0xB0, 0xFF));
-            g.FillPath(barBrush, barPath);
+            float x = left ? 133 : W - 133;
+            using var bar = new Pen(FlatLight, 3.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            using var path = new GraphicsPath();
+            path.AddBezier(new PointF(x + (left ? 3 : -3), 60), new PointF(x - (left ? 1 : -1), 78), new PointF(x, 96), new PointF(x + (left ? 9 : -9), 110));
+            g.DrawPath(bar, path);
         }
+        // Speaker holes under the touchpad.
+        using (var hole = new SolidBrush(Color.FromArgb(0x5A, 0x5E, 0x66)))
+            foreach (float x in new[] { 188f, 200f, 212f })
+                g.FillEllipse(hole, x - 1.6f, 118.4f, 3.2f, 3.2f);
 
-        SmallKey(g, new RectangleF(125, 62, 8, 17), P(PhysicalButton.Create), accent);
-        SmallKey(g, new RectangleF(267, 62, 8, 17), P(PhysicalButton.Options), accent);
+        FlatPill(g, new PointF(123, 74), P(PhysicalButton.Create), PressColor(PhysicalButton.Create), create: true);
+        FlatPill(g, new PointF(W - 123, 74), P(PhysicalButton.Options), PressColor(PhysicalButton.Options), create: false);
 
-        PsDpad(g, new PointF(86, 112), P(PhysicalButton.DpadUp), P(PhysicalButton.DpadDown),
-            P(PhysicalButton.DpadLeft), P(PhysicalButton.DpadRight), accent);
+        FlatDpad(g, new PointF(86, 108), P(PhysicalButton.DpadUp), P(PhysicalButton.DpadDown), P(PhysicalButton.DpadLeft), P(PhysicalButton.DpadRight));
 
-        var face = new PointF(314, 112);
-        PsFace(g, new PointF(face.X, face.Y - 22), PsSymbol.Triangle, Theme.PsTriangle, P(PhysicalButton.Triangle));
-        PsFace(g, new PointF(face.X + 22, face.Y), PsSymbol.Circle, Theme.PsCircle, P(PhysicalButton.Circle));
-        PsFace(g, new PointF(face.X, face.Y + 22), PsSymbol.Cross, Theme.PsCross, P(PhysicalButton.Cross));
-        PsFace(g, new PointF(face.X - 22, face.Y), PsSymbol.Square, Theme.PsSquare, P(PhysicalButton.Square));
+        var face = new PointF(314, 108);
+        FlatFace(g, new PointF(face.X, face.Y - 23), PsSymbol.Triangle, P(PhysicalButton.Triangle), PressColor(PhysicalButton.Triangle));
+        FlatFace(g, new PointF(face.X + 23, face.Y), PsSymbol.Circle, P(PhysicalButton.Circle), PressColor(PhysicalButton.Circle));
+        FlatFace(g, new PointF(face.X, face.Y + 23), PsSymbol.Cross, P(PhysicalButton.Cross), PressColor(PhysicalButton.Cross));
+        FlatFace(g, new PointF(face.X - 23, face.Y), PsSymbol.Square, P(PhysicalButton.Square), PressColor(PhysicalButton.Square));
 
-        Stick(g, new PointF(152, 152), _ds.LeftX, _ds.LeftY, P(PhysicalButton.L3), accent, dark: true);
-        Stick(g, new PointF(248, 152), _ds.RightX, _ds.RightY, P(PhysicalButton.R3), accent, dark: true);
+        FlatStick(g, new PointF(152, 156), _ds.LeftX, _ds.LeftY, P(PhysicalButton.L3));
+        FlatStick(g, new PointF(248, 156), _ds.RightX, _ds.RightY, P(PhysicalButton.R3));
 
-        // PS button and mute.
+        // PS logo and the mute button.
         var ps = new PointF(200, 150);
-        if (P(PhysicalButton.PS))
-            Glow(g, ps, 22, accent);
-        using (var psFill = new SolidBrush(P(PhysicalButton.PS) ? accent : Color.FromArgb(0x1E, 0x21, 0x28)))
-        using (var psPen = new Pen(Color.FromArgb(0x45, 0x4A, 0x55), 1f))
-        {
-            g.FillEllipse(psFill, ps.X - 9, ps.Y - 9, 18, 18);
-            g.DrawEllipse(psPen, ps.X - 9, ps.Y - 9, 18, 18);
-        }
-        DrawCentered(g, "PS", TinyFont, P(PhysicalButton.PS) ? Color.White : Color.FromArgb(0x9A, 0xA1, 0xAD), ps);
-
-        var mute = new RectangleF(190, 168, 20, 6);
+        bool psOn = P(PhysicalButton.PS);
+        if (psOn)
+            Glow(g, ps, 18, Theme.PsBlue, 200);
+        DrawPsLogo(g, ps, psOn ? Color.White : Color.FromArgb(0xC8, 0xCC, 0xD3));
+        var mute = new RectangleF(191, 166, 18, 5);
         bool muted = P(PhysicalButton.Mute);
         if (muted)
-            GlowRect(g, mute, 7, Color.FromArgb(0xFF, 0x8A, 0x3D));
-        using (var mutePath = Theme.RoundedRect(mute, 3))
-        using (var muteBrush = new SolidBrush(muted ? Color.FromArgb(0xFF, 0x9F, 0x5F) : Color.FromArgb(0x2C, 0x30, 0x38)))
+            GlowRect(g, mute, 6, Color.FromArgb(0xFF, 0x8A, 0x3D));
+        using (var mutePath = Theme.RoundedRect(mute, 2.5f))
+        using (var muteBrush = new SolidBrush(muted ? Color.FromArgb(0xFF, 0x9F, 0x5F) : Color.FromArgb(0xC8, 0xCC, 0xD3)))
             g.FillPath(muteBrush, mutePath);
+    }
+
+    static void TriggerMeter(Graphics g, RectangleF r, byte value, bool ticksRight)
+    {
+        float level = value / 255f;
+        using (var track = Theme.RoundedRect(r, r.Width / 2))
+        {
+            using var back = new SolidBrush(Color.FromArgb(0x26, 0x28, 0x2D));
+            g.FillPath(back, track);
+            if (level > 0.01f)
+            {
+                var state = g.Save();
+                g.SetClip(track);
+                float h = r.Height * level;
+                using var fill = new SolidBrush(FlatTrigger);
+                g.FillRectangle(fill, r.X, r.Bottom - h, r.Width, h);
+                g.Restore(state);
+            }
+            using var pen = new Pen(Color.FromArgb(0xE6, 0xE8, 0xEC), 1.6f);
+            g.DrawPath(pen, track);
+        }
+        // Three ticks beside the pill; they light up as the trigger passes each third.
+        float x0 = ticksRight ? r.Right + 4 : r.X - 4;
+        for (int i = 0; i < 3; i++)
+        {
+            float y = r.Y + r.Height * (0.28f + i * 0.22f);
+            float len = 9 - i * 1.5f;
+            bool lit = level >= (3 - i) / 3f - 0.01f;
+            using var tick = new Pen(lit ? FlatTrigger : Color.FromArgb(0x7A, 0x7E, 0x86), 2.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            g.DrawLine(tick, x0, y, ticksRight ? x0 + len : x0 - len, y);
+        }
+    }
+
+    static void FlatShoulder(Graphics g, RectangleF r, float radius, string label, bool pressed, Color color)
+    {
+        if (pressed)
+            GlowRect(g, r, 7, Theme.PsBlue, 150);
+        using var path = Theme.RoundedRect(r, radius);
+        using var fill = new SolidBrush(pressed ? Theme.PsBlue : color);
+        g.FillPath(fill, path);
+        DrawCentered(g, label, TinyFont, pressed ? Color.White : Color.FromArgb(0xC8, 0xCC, 0xD3), new PointF(r.X + r.Width / 2, r.Y + 8));
+    }
+
+    static void FlatPill(Graphics g, PointF c, bool pressed, Color color, bool create)
+    {
+        var r = new RectangleF(c.X - 4.5f, c.Y - 9, 9, 18);
+        if (pressed)
+            GlowRect(g, r, 6, color);
+        using (var path = Theme.RoundedRect(r, 4.5f))
+        {
+            using var fill = new SolidBrush(pressed ? color : Color.White);
+            using var pen = new Pen(pressed ? color : FlatInk, 1.1f);
+            g.FillPath(fill, path);
+            g.DrawPath(pen, path);
+        }
+        // Tiny icon above: three rays for Create, three lines for Options.
+        using var ink = new Pen(pressed ? color : Color.FromArgb(0x8A, 0x8F, 0x98), 0.9f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        float top = c.Y - 14;
+        if (create)
+        {
+            g.DrawLine(ink, c.X, top - 3, c.X, top);
+            g.DrawLine(ink, c.X - 3, top - 2, c.X - 2, top);
+            g.DrawLine(ink, c.X + 3, top - 2, c.X + 2, top);
+        }
+        else
+        {
+            for (int i = 0; i < 3; i++)
+                g.DrawLine(ink, c.X - 2.5f, top - 3 + i * 1.5f, c.X + 2.5f, top - 3 + i * 1.5f);
+        }
+    }
+
+    static void FlatDpad(Graphics g, PointF c, bool up, bool down, bool left, bool right)
+    {
+        void Key(PointF[] shape, PointF center, bool pressed, float angle)
+        {
+            using var path = new GraphicsPath();
+            path.AddPolygon(shape);
+            if (pressed)
+                Glow(g, center, 18, Theme.PsBlue, 190);
+            using var fill = new SolidBrush(pressed ? Theme.PsBlue : FlatInk);
+            g.FillPath(fill, path);
+            using var round = new Pen(pressed ? Theme.PsBlue : FlatInk, 3f) { LineJoin = LineJoin.Round };
+            g.DrawPath(round, path);
+
+            var state = g.Save();
+            g.TranslateTransform(center.X, center.Y);
+            g.RotateTransform(angle);
+            using var arrow = new SolidBrush(Color.White);
+            g.FillPolygon(arrow, new PointF[] { new(0, -3.4f), new(3.4f, 1.8f), new(-3.4f, 1.8f) });
+            g.Restore(state);
+        }
+
+        float x = c.X, y = c.Y;
+        Key(new PointF[] { new(x - 7.5f, y - 24), new(x + 7.5f, y - 24), new(x + 7.5f, y - 12), new(x, y - 6), new(x - 7.5f, y - 12) }, new(x, y - 16), up, 0);
+        Key(new PointF[] { new(x - 7.5f, y + 24), new(x + 7.5f, y + 24), new(x + 7.5f, y + 12), new(x, y + 6), new(x - 7.5f, y + 12) }, new(x, y + 16), down, 180);
+        Key(new PointF[] { new(x - 24, y - 7.5f), new(x - 24, y + 7.5f), new(x - 12, y + 7.5f), new(x - 6, y), new(x - 12, y - 7.5f) }, new(x - 16, y), left, 270);
+        Key(new PointF[] { new(x + 24, y - 7.5f), new(x + 24, y + 7.5f), new(x + 12, y + 7.5f), new(x + 6, y), new(x + 12, y - 7.5f) }, new(x + 16, y), right, 90);
+    }
+
+    static void FlatFace(Graphics g, PointF c, PsSymbol symbol, bool pressed, Color color)
+    {
+        const float r = 11.5f;
+        var rect = new RectangleF(c.X - r, c.Y - r, r * 2, r * 2);
+        if (pressed)
+            Glow(g, c, r * 2.2f, color, 200);
+        using (var fill = new SolidBrush(pressed ? color : Color.White))
+        using (var rim = new Pen(FlatInk, 1.6f))
+        {
+            g.FillEllipse(fill, rect);
+            g.DrawEllipse(rim, rect);
+        }
+
+        using var pen = new Pen(pressed ? Color.White : FlatInk, 1.7f) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round };
+        switch (symbol)
+        {
+            case PsSymbol.Triangle:
+                g.DrawPolygon(pen, new PointF[] { new(c.X, c.Y - 5.6f), new(c.X + 5.6f, c.Y + 3.8f), new(c.X - 5.6f, c.Y + 3.8f) });
+                break;
+            case PsSymbol.Circle:
+                g.DrawEllipse(pen, c.X - 5.4f, c.Y - 5.4f, 10.8f, 10.8f);
+                break;
+            case PsSymbol.Cross:
+                g.DrawLine(pen, c.X - 4.8f, c.Y - 4.8f, c.X + 4.8f, c.Y + 4.8f);
+                g.DrawLine(pen, c.X + 4.8f, c.Y - 4.8f, c.X - 4.8f, c.Y + 4.8f);
+                break;
+            case PsSymbol.Square:
+                g.DrawRectangle(pen, c.X - 4.6f, c.Y - 4.6f, 9.2f, 9.2f);
+                break;
+        }
+    }
+
+    static void FlatStick(Graphics g, PointF c, short x, short y, bool pressed)
+    {
+        const float well = 24, cap = 17, travel = 8;
+        using (var wellBrush = new SolidBrush(Color.FromArgb(0x0B, 0x0C, 0x0E)))
+            g.FillEllipse(wellBrush, c.X - well, c.Y - well, well * 2, well * 2);
+
+        var k = new PointF(c.X + x / 32768f * travel, c.Y - y / 32768f * travel);
+        if (pressed)
+            Glow(g, k, cap + 12, Theme.PsBlue, 200);
+        using (var capFill = new SolidBrush(pressed ? Theme.PsBlue : Color.FromArgb(0x2E, 0x31, 0x38)))
+            g.FillEllipse(capFill, k.X - cap, k.Y - cap, cap * 2, cap * 2);
+        using (var ring = new Pen(pressed ? Color.FromArgb(0xBF, 0xD6, 0xFF) : Color.FromArgb(0x55, 0x5A, 0x64), 1.4f))
+            g.DrawEllipse(ring, k.X - 11, k.Y - 11, 22, 22);
+        using (var dish = new SolidBrush(pressed ? ControlPaint.Dark(Theme.PsBlue, 0.1f) : Color.FromArgb(0x24, 0x27, 0x2D)))
+            g.FillEllipse(dish, k.X - 10, k.Y - 10, 20, 20);
+    }
+
+    /// <summary>A simple "P/S"-style mark drawn as two strokes (not the trademark logo).</summary>
+    static void DrawPsLogo(Graphics g, PointF c, Color color)
+    {
+        using var font = new Font("Segoe UI Black", 9f, GraphicsUnit.Pixel);
+        DrawCentered(g, "PS", font, color, c);
     }
 
     enum PsSymbol
@@ -604,73 +808,7 @@ internal sealed class PadView : Control
         Square,
     }
 
-    static void PsFace(Graphics g, PointF c, PsSymbol symbol, Color color, bool pressed)
-    {
-        const float r = 11.5f;
-        if (pressed)
-            Glow(g, c, r * 2.4f, color, 210);
 
-        var rect = new RectangleF(c.X - r, c.Y - r, r * 2, r * 2);
-        using (var fill = new LinearGradientBrush(rect,
-                   pressed ? ControlPaint.Light(color, 0.35f) : Color.FromArgb(0xEC, 0xEE, 0xF2),
-                   pressed ? color : Color.FromArgb(0xC6, 0xCA, 0xD2), LinearGradientMode.Vertical))
-        using (var rim = new Pen(pressed ? ControlPaint.Light(color, 0.5f) : Color.FromArgb(0xAE, 0xB3, 0xBC), 1.2f))
-        {
-            g.FillEllipse(fill, rect);
-            g.DrawEllipse(rim, rect);
-        }
-
-        using var pen = new Pen(pressed ? Color.White : Color.FromArgb(0x86, 0x8E, 0x9B), 1.9f) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round };
-        switch (symbol)
-        {
-            case PsSymbol.Triangle:
-                g.DrawPolygon(pen, new PointF[] { new(c.X, c.Y - 5.2f), new(c.X + 5.2f, c.Y + 3.6f), new(c.X - 5.2f, c.Y + 3.6f) });
-                break;
-            case PsSymbol.Circle:
-                g.DrawEllipse(pen, c.X - 5, c.Y - 5, 10, 10);
-                break;
-            case PsSymbol.Cross:
-                g.DrawLine(pen, c.X - 4.5f, c.Y - 4.5f, c.X + 4.5f, c.Y + 4.5f);
-                g.DrawLine(pen, c.X + 4.5f, c.Y - 4.5f, c.X - 4.5f, c.Y + 4.5f);
-                break;
-            case PsSymbol.Square:
-                g.DrawRectangle(pen, c.X - 4.3f, c.Y - 4.3f, 8.6f, 8.6f);
-                break;
-        }
-    }
-
-    static void PsDpad(Graphics g, PointF c, bool up, bool down, bool left, bool right, Color accent)
-    {
-        // Four separate arrow keys pointing at the center, like the DualSense.
-        void Key(PointF[] shape, PointF center, bool pressed, float angle)
-        {
-            if (pressed)
-                Glow(g, center, 20, accent);
-            using var path = new GraphicsPath();
-            path.AddPolygon(shape);
-            var b = path.GetBounds();
-            using var fill = new LinearGradientBrush(RectangleF.Inflate(b, 1, 1),
-                pressed ? ControlPaint.Light(accent, 0.3f) : Color.FromArgb(0xEE, 0xF0, 0xF3),
-                pressed ? accent : Color.FromArgb(0xCB, 0xCF, 0xD6), LinearGradientMode.Vertical);
-            using var rim = new Pen(pressed ? ControlPaint.Light(accent, 0.4f) : Color.FromArgb(0xAE, 0xB3, 0xBC), 1f) { LineJoin = LineJoin.Round };
-            g.FillPath(fill, path);
-            g.DrawPath(rim, path);
-
-            // Small arrow glyph pointing outward.
-            var state = g.Save();
-            g.TranslateTransform(center.X, center.Y);
-            g.RotateTransform(angle);
-            using var glyph = new SolidBrush(pressed ? Color.White : Color.FromArgb(0x9A, 0xA1, 0xAD));
-            g.FillPolygon(glyph, new PointF[] { new(0, -3.2f), new(3, 1.6f), new(-3, 1.6f) });
-            g.Restore(state);
-        }
-
-        float x = c.X, y = c.Y;
-        Key(new PointF[] { new(x - 8, y - 25), new(x + 8, y - 25), new(x + 8, y - 12), new(x, y - 5), new(x - 8, y - 12) }, new(x, y - 16), up, 0);
-        Key(new PointF[] { new(x - 8, y + 25), new(x + 8, y + 25), new(x + 8, y + 12), new(x, y + 5), new(x - 8, y + 12) }, new(x, y + 16), down, 180);
-        Key(new PointF[] { new(x - 25, y - 8), new(x - 25, y + 8), new(x - 12, y + 8), new(x - 5, y), new(x - 12, y - 8) }, new(x - 16, y), left, 270);
-        Key(new PointF[] { new(x + 25, y - 8), new(x + 25, y + 8), new(x + 12, y + 8), new(x + 5, y), new(x + 12, y - 8) }, new(x + 16, y), right, 90);
-    }
 
     // ------------------------------------------------------------------ Xbox 360
 

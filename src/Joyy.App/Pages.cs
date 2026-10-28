@@ -105,6 +105,8 @@ internal sealed class HomePage : Page
     uint _lastButtons;
     PhysicalButton? _lastPressed;
     long _lastSlow;
+    Profile? _mapFor;
+    ButtonMap? _map;
     bool _hadDevice;
 
     public HomePage(ShellContext ctx) : base(ctx, "Home", "")
@@ -171,7 +173,13 @@ internal sealed class HomePage : Page
         string detail = s.Device is { } d
             ? $"{d.Name}  ·  {StatusView.Connection(d.Connection)}"
             : live.HostRunning ? "Connect your DualSense with USB or Bluetooth" : "Paused: the virtual Xbox controller is unplugged";
-        var map = ButtonMap.Create(live.Active.NintendoLayout, live.Active.ButtonOverrides);
+        if (!ReferenceEquals(live.Active, _mapFor))
+        {
+            _mapFor = live.Active;
+            _map = ButtonMap.Create(live.Active.NintendoLayout, live.Active.ButtonOverrides);
+            _pad.Map = _map;
+        }
+        var map = _map!;
         if (connected && s.Input.L2 > 40)
             _readout.Set("L2", "LT", Theme.Raised, false, detail);
         else if (connected && s.Input.R2 > 40)

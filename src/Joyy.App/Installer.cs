@@ -1,4 +1,4 @@
-using System.Diagnostics;
+﻿using System.Diagnostics;
 using Joyy.Platform;
 using Microsoft.Win32;
 
@@ -143,8 +143,25 @@ internal static class Installer
             }
         }
 
+        // The guardian (and a Joyy that is still shutting down) keep the installed exe locked for
+        // a moment after the quit signal; wait for them, then retry briefly if Windows still holds it.
+        WaitForInstalledProcesses();
         foreach (var f in files.Distinct(StringComparer.OrdinalIgnoreCase))
-            File.Copy(f, Path.Combine(InstallDir, Path.GetFileName(f)), overwrite: true);
+        {
+            string target = Path.Combine(InstallDir, Path.GetFileName(f));
+            for (int attempt = 1; ; attempt++)
+            {
+                try
+                {
+                    File.Copy(f, target, overwrite: true);
+                    break;
+                }
+                catch (IOException) when (attempt < 25)
+                {
+                    Thread.Sleep(200);
+                }
+            }
+        }
 
         // License of the bundled HidHide installer, next to the exe.
         using var notices = typeof(Installer).Assembly.GetManifestResourceStream("ThirdPartyNotices.txt");
@@ -152,6 +169,31 @@ internal static class Installer
         {
             using var file = File.Create(Path.Combine(InstallDir, "THIRD-PARTY-NOTICES.txt"));
             notices.CopyTo(file);
+        }
+    }
+
+    /// <summary>Waits up to 10 s for Joyy processes started from the install folder (app or guardian) to exit.</summary>
+    static void WaitForInstalledProcesses()
+    {
+        int self = Environment.ProcessId;
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        foreach (var process in Process.GetProcessesByName("Joyy"))
+        {
+            using (process)
+            {
+                try
+                {
+                    if (process.Id == self || !string.Equals(process.MainModule?.FileName, InstalledExe, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    var left = deadline - DateTime.UtcNow;
+                    if (left > TimeSpan.Zero)
+                        process.WaitForExit(left);
+                }
+                catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+                {
+                    // Exited meanwhile, or not ours to inspect.
+                }
+            }
         }
     }
 
