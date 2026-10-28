@@ -24,19 +24,7 @@ internal sealed class PadView : Control
     static readonly Font FaceFont = new("Segoe UI", 12.5f, FontStyle.Bold, GraphicsUnit.Pixel);
     static readonly Font OverlayFont = new("Segoe UI Semibold", 15f, GraphicsUnit.Pixel);
 
-    // Left half of each outline, top-center to bottom-center, as cubic Bezier points; mirrored for the right.
-    static readonly PointF[] DualSenseOutline =
-    {
-        new(200, 60),
-        new(170, 60), new(142, 57), new(120, 55),
-        new(98, 53), new(78, 50), new(64, 60),
-        new(48, 72), new(42, 102), new(43, 130),
-        new(44, 172), new(48, 214), new(66, 238),
-        new(80, 256), new(110, 256), new(122, 238),
-        new(134, 220), new(140, 198), new(154, 187),
-        new(166, 178), new(184, 176), new(200, 176),
-    };
-
+    // Left half of the outline, top-center to bottom-center, as cubic Bezier points; mirrored for the right.
     static readonly PointF[] Xbox360Outline =
     {
         new(200, 64),
@@ -81,15 +69,15 @@ internal sealed class PadView : Control
     // Positions in the 400x270 design space of the built-in drawings.
     static readonly Dictionary<PhysicalButton, Spot> DsDrawSpots = new()
     {
-        [PhysicalButton.Cross] = new(314, 131, 12), [PhysicalButton.Circle] = new(337, 108, 12),
-        [PhysicalButton.Square] = new(291, 108, 12), [PhysicalButton.Triangle] = new(314, 85, 12),
-        [PhysicalButton.L1] = new(102, 40, 14), [PhysicalButton.R1] = new(298, 40, 14),
-        [PhysicalButton.L3] = new(152, 156, 20), [PhysicalButton.R3] = new(248, 156, 20),
-        [PhysicalButton.Options] = new(277, 74, 8), [PhysicalButton.Create] = new(123, 74, 8),
-        [PhysicalButton.PS] = new(200, 150, 10), [PhysicalButton.Touchpad] = new(200, 84, 28),
-        [PhysicalButton.Mute] = new(200, 168, 7),
-        [PhysicalButton.DpadUp] = new(86, 92, 10), [PhysicalButton.DpadDown] = new(86, 124, 10),
-        [PhysicalButton.DpadLeft] = new(70, 108, 10), [PhysicalButton.DpadRight] = new(102, 108, 10),
+        [PhysicalButton.Cross] = new(265, 122, 11), [PhysicalButton.Circle] = new(288, 102, 11),
+        [PhysicalButton.Square] = new(242, 102, 11), [PhysicalButton.Triangle] = new(265, 82, 11),
+        [PhysicalButton.L1] = new(68, 38, 13), [PhysicalButton.R1] = new(259, 38, 13),
+        [PhysicalButton.L3] = new(112, 143, 19), [PhysicalButton.R3] = new(215, 143, 19),
+        [PhysicalButton.Options] = new(240, 71, 7), [PhysicalButton.Create] = new(87, 71, 7),
+        [PhysicalButton.PS] = new(163.5f, 134, 9), [PhysicalButton.Touchpad] = new(163.5f, 75, 30),
+        [PhysicalButton.Mute] = new(163.5f, 146.5f, 6),
+        [PhysicalButton.DpadUp] = new(62, 88, 9), [PhysicalButton.DpadDown] = new(62, 116, 9),
+        [PhysicalButton.DpadLeft] = new(48, 102, 9), [PhysicalButton.DpadRight] = new(76, 102, 9),
     };
 
     static readonly Dictionary<X360Buttons, Spot> XbDrawSpots = new()
@@ -215,8 +203,10 @@ internal sealed class PadView : Control
         else
         {
             var state = g.Save();
-            float s = Math.Min(Width / W, Height / H);
-            float ox = (Width - W * s) / 2, oy = (Height - H * s) / 2;
+            bool ds = _kind == PadKind.DualSense;
+            float dw = ds ? DsW : W, dh = ds ? DsH : H;
+            float s = Math.Min(Width / dw, Height / dh);
+            float ox = (Width - dw * s) / 2, oy = (Height - dh * s) / 2;
             _mapPoint = (x, y) => new PointF(ox + x * s, oy + y * s);
             _mapRadius = r => r * s;
             g.TranslateTransform(ox, oy);
@@ -524,19 +514,38 @@ internal sealed class PadView : Control
 
     ButtonMap? _map;
 
-    static readonly Color FlatWhite = Color.FromArgb(0xF4, 0xF5, 0xF7);
-    static readonly Color FlatLine = Color.FromArgb(0xC9, 0xCD, 0xD4);
-    static readonly Color FlatBlack = Color.FromArgb(0x16, 0x17, 0x1A);
-    static readonly Color FlatInk = Color.FromArgb(0x1E, 0x20, 0x24);
-    static readonly Color FlatTrigger = Color.FromArgb(0xE5, 0x48, 0x4D);
-    static readonly Color FlatLight = Color.FromArgb(0x2F, 0x7B, 0xFF);
+    // The DualSense drawing has its own design space (wider and flatter than the Xbox one).
+    const float DsW = 327, DsH = 192, DsCx = DsW / 2;
+
+    static readonly Color DsShell = Color.FromArgb(0xF3, 0xF6, 0xFA);
+    static readonly Color DsShellRim = Color.FromArgb(0xC4, 0xCA, 0xD3);
+    static readonly Color DsBlack = Color.FromArgb(0x1D, 0x1E, 0x21);
+    static readonly Color DsBlackEdge = Color.FromArgb(0x38, 0x3A, 0x40);
+    static readonly Color DsTriggerBack = Color.FromArgb(0x2C, 0x2D, 0x32);
+    static readonly Color DsSymbol = Color.FromArgb(0xD2, 0xD5, 0xDA);
+    static readonly Color DsMeterRed = Color.FromArgb(0xE0, 0x4F, 0x55);
+    static readonly Color DsLightBar = Color.FromArgb(0x2E, 0x78, 0xD8);
+    static readonly Color DsRing = Color.FromArgb(0x4B, 0x3B, 0xF0);
+
+    // Left half of the shell, top center to bottom center (cubic Beziers); mirrored for the right.
+    static readonly PointF[] DsShellOutline =
+    {
+        new(DsCx, 38),
+        new(120, 38), new(58, 38), new(42, 43),
+        new(28, 48), new(20, 64), new(16, 84),
+        new(11, 106), new(6, 128), new(8, 148),
+        new(10, 166), new(20, 182), new(33, 187),
+        new(42, 190), new(48, 182), new(56, 172),
+        new(64, 162), new(70, 154), new(84, 151),
+        new(110, 150), new(140, 151), new(DsCx, 151),
+    };
 
     Color PressColor(PhysicalButton b)
     {
         var target = _map?[b] ?? X360Buttons.None;
         return target switch
         {
-            X360Buttons.A => Theme.XbA,
+            X360Buttons.A => Color.FromArgb(0x8F, 0xD4, 0x00),
             X360Buttons.B => Theme.XbB,
             X360Buttons.X => Theme.XbX,
             X360Buttons.Y => Theme.XbY,
@@ -544,260 +553,335 @@ internal sealed class PadView : Control
         };
     }
 
-    /// <summary>Flat, illustration-style DualSense: white shell, black core, outlined symbols.</summary>
+    static PointF Mirror(PointF p) => new(DsW - p.X, p.Y);
+
+    static PointF[] Mirror(PointF[] points) => points.Select(Mirror).ToArray();
+
+    /// <summary>Flat, illustration-style DualSense: white wings, black center and touchpad, black shoulders.</summary>
     void DrawDualSense(Graphics g)
     {
         bool P(PhysicalButton b) => _ds.IsPressed(b);
 
-        // Trigger meters at the far sides: a pill that fills as L2/R2 is pulled, plus three ticks.
-        TriggerMeter(g, new RectangleF(10, 34, 13, 44), _ds.L2, ticksRight: true);
-        TriggerMeter(g, new RectangleF(W - 23, 34, 13, 44), _ds.R2, ticksRight: false);
-
-        // Shoulders behind the shell: L2/R2 triggers, then L1/R1 bumpers.
-        FlatShoulder(g, new RectangleF(72, 8, 64, 44), 14, "L2", _ds.L2 > 20, Color.FromArgb(0x2A, 0x2C, 0x31));
-        FlatShoulder(g, new RectangleF(W - 136, 8, 64, 44), 14, "R2", _ds.R2 > 20, Color.FromArgb(0x2A, 0x2C, 0x31));
-        FlatShoulder(g, new RectangleF(62, 32, 80, 28), 10, "L1", P(PhysicalButton.L1), Color.FromArgb(0x3A, 0x3D, 0x44));
-        FlatShoulder(g, new RectangleF(W - 142, 32, 80, 28), 10, "R1", P(PhysicalButton.R1), Color.FromArgb(0x3A, 0x3D, 0x44));
-
-        using var body = Mirrored(DualSenseOutline);
-        using (var fill = new SolidBrush(FlatWhite))
-            g.FillPath(fill, body);
-
-        // Black core between the grips, clipped to the shell.
-        var clip = g.Save();
-        g.SetClip(body);
-        using (var core = new GraphicsPath())
+        // Soft violet halo so the black parts stand out from a black window.
+        using (var halo = new GraphicsPath())
         {
-            core.AddClosedCurve(new PointF[] { new(128, 96), new(272, 96), new(294, 140), new(258, 204), new(142, 204), new(106, 140) }, 0.42f);
-            using var coreFill = new SolidBrush(FlatBlack);
-            g.FillPath(coreFill, core);
+            // Kept inside the design box: past it the control's edge would cut the fade off.
+            halo.AddEllipse(-24, 2, DsW + 48, DsH - 4);
+            using var brush = new PathGradientBrush(halo)
+            {
+                CenterColor = Color.FromArgb(0x24, 0x1E, 0x33),
+                SurroundColors = new[] { Color.FromArgb(0, 0x24, 0x1E, 0x33) },
+                FocusScales = new PointF(0.35f, 0.3f),
+            };
+            g.FillPath(brush, halo);
+        }
+
+        DsMeter(g, new RectangleF(8, 23, 12, 30), _ds.L2, barsRight: true);
+        DsMeter(g, new RectangleF(DsW - 20, 23, 12, 30), _ds.R2, barsRight: false);
+
+        // Shell.
+        using var shell = MirroredPath(DsShellOutline, DsW);
+        using (var fill = new SolidBrush(DsShell))
+            g.FillPath(fill, shell);
+        // Rim everywhere except the lower edge between the grips, which the black center owns.
+        var rimClip = g.Save();
+        g.ExcludeClip(Rectangle.Round(new RectangleF(74, 144, DsW - 148, 30)));
+        using (var shellRim = new Pen(DsShellRim, 1f))
+            g.DrawPath(shellRim, shell);
+        g.Restore(rimClip);
+
+        // Black center (touchpad and everything under it) and the black strips down the inside of
+        // each grip, clipped to the shell; stick wells hang below the shell's lower edge.
+        var clip = g.Save();
+        g.SetClip(shell);
+        var centerLeft = new PointF[]
+        {
+            new(DsCx, 40), new(98, 40), new(94, 42), new(94, 60),
+            new(95, 90), new(94, 112), new(86, 124), new(74, 136),
+            new(66, 147), new(62, 156), new(56, 166), new(46, 180), new(40, 194),
+        };
+        using (var center = new GraphicsPath())
+        {
+            // Down the left side, across below the shell, up the right side.
+            var pts = new List<PointF>(centerLeft) { new(30, 205), new(DsW - 30, 205) };
+            pts.AddRange(Mirror(centerLeft).Reverse().SkipLast(1));
+            center.AddClosedCurve(pts.ToArray(), 0.25f);
+            using var black = new SolidBrush(DsBlack);
+            g.FillPath(black, center);
+        }
+        // White rim along the inner edge of each grip, inside the black strip.
+        foreach (bool right in new[] { false, true })
+        {
+            using var rimPath = new GraphicsPath();
+            var rim = new PointF[] { new(76, 152), new(70, 160), new(64, 170), new(56, 180), new(50, 192) };
+            rimPath.AddCurve(right ? Mirror(rim) : rim, 0.4f);
+            using var pen = new Pen(DsShell, 6f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            g.DrawPath(pen, rimPath);
         }
         g.Restore(clip);
-        using (var rim = new Pen(FlatLine, 1.1f))
-            g.DrawPath(rim, body);
+        // Cover the white shell's anti-aliased fringe along the black lower edge between the grips.
+        using (var seam = new SolidBrush(DsBlack))
+            g.FillRectangle(seam, 80, 148.6f, DsW - 160, 3);
 
-        // Touchpad: white, faint dot texture, light bar down both sides.
+        foreach (var c in new[] { new PointF(112, 142), new PointF(DsW - 112, 142) })
+        {
+            using var well = new SolidBrush(Color.FromArgb(0x2A, 0x2B, 0x31));
+            g.FillEllipse(well, c.X - 24, c.Y - 22, 48, 44);
+            using var wellEdge = new Pen(Color.FromArgb(0x15, 0x16, 0x19), 1.2f);
+            g.DrawEllipse(wellEdge, c.X - 24, c.Y - 22, 48, 44);
+        }
+
+        // Shoulders: big black caps over the top of each wing, L2 behind L1.
+        DsShoulder(g, right: false, l2: _ds.L2, l1: P(PhysicalButton.L1));
+        DsShoulder(g, right: true, l2: _ds.R2, l1: P(PhysicalButton.R1));
+
+        // White strip across the top with the slot in the middle.
+        var strip = new RectangleF(86, 30, DsW - 172, 12);
+        using (var stripPath = Theme.RoundedRect(strip, 6))
+        using (var stripFill = new SolidBrush(DsShell))
+        using (var stripRim = new Pen(DsShellRim, 0.8f))
+        {
+            g.FillPath(stripFill, stripPath);
+            g.DrawPath(stripRim, stripPath);
+        }
+        using (var slot = Theme.RoundedRect(new RectangleF(DsCx - 9, 33.6f, 18, 3), 1.5f))
+        using (var slotFill = new SolidBrush(Color.FromArgb(0x3A, 0x3C, 0x42)))
+            g.FillPath(slotFill, slot);
+
+        // Touchpad: dot grid on black, light bar down both sides, three marks along the bottom.
         bool touch = P(PhysicalButton.Touchpad);
-        using (var tp = new GraphicsPath())
+        var pad = new RectangleF(97, 43, DsW - 194, 64);
+        if (touch)
+            GlowRect(g, pad, 6, Theme.PsBlue, 120);
+        using (var dot = new SolidBrush(touch ? Color.FromArgb(0x8F, 0xB6, 0xFF) : Color.FromArgb(0x86, 0x88, 0x8E)))
         {
-            tp.AddBeziers(new PointF[]
+            for (int row = 0; row < 13; row++)
             {
-                new(138, 56), new(170, 54), new(230, 54), new(262, 56),
-                new(266, 74), new(262, 98), new(252, 110),
-                new(220, 113), new(180, 113), new(148, 110),
-                new(138, 98), new(134, 74), new(138, 56),
-            });
-            tp.CloseFigure();
-            if (touch)
-            {
-                var b = tp.GetBounds();
-                GlowRect(g, b, 8, Theme.PsBlue, 150);
+                float y = 47.5f + row * 4.5f;
+                float shift = row % 2 == 0 ? 0 : 2.25f;
+                for (float x = 101.5f + shift; x < DsW - 100; x += 4.5f)
+                    g.FillEllipse(dot, x - 0.85f, y - 0.85f, 1.7f, 1.7f);
             }
-            using var tpFill = new SolidBrush(touch ? Color.FromArgb(0xDC, 0xE8, 0xFF) : Color.White);
-            using var tpPen = new Pen(touch ? Theme.PsBlue : FlatLine, touch ? 1.6f : 1f);
-            g.FillPath(tpFill, tp);
-            var inner = g.Save();
-            g.SetClip(tp);
-            using (var dot = new SolidBrush(Color.FromArgb(touch ? 90 : 46, FlatInk)))
-                for (float y = 62; y < 110; y += 5)
-                    for (float x = 142 + ((int)((y - 62) / 5) % 2) * 2.5f; x < 260; x += 5)
-                        g.FillEllipse(dot, x - 0.6f, y - 0.6f, 1.2f, 1.2f);
-            g.Restore(inner);
-            g.DrawPath(tpPen, tp);
         }
-        foreach (bool left in new[] { true, false })
+        foreach (bool right in new[] { false, true })
         {
-            float x = left ? 133 : W - 133;
-            using var bar = new Pen(FlatLight, 3.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            var bar = new PointF[] { new(96.5f, 43), new(96.5f, 70), new(97.5f, 95), new(101, 106) };
             using var path = new GraphicsPath();
-            path.AddBezier(new PointF(x + (left ? 3 : -3), 60), new PointF(x - (left ? 1 : -1), 78), new PointF(x, 96), new PointF(x + (left ? 9 : -9), 110));
-            g.DrawPath(bar, path);
+            path.AddBeziers(right ? Mirror(bar) : bar);
+            using var pen = new Pen(touch ? Theme.PsBlue : DsLightBar, 2.4f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            g.DrawPath(pen, path);
         }
-        // Speaker holes under the touchpad.
-        using (var hole = new SolidBrush(Color.FromArgb(0x5A, 0x5E, 0x66)))
-            foreach (float x in new[] { 188f, 200f, 212f })
-                g.FillEllipse(hole, x - 1.6f, 118.4f, 3.2f, 3.2f);
+        using (var mark = new SolidBrush(Color.FromArgb(0xEE, 0xF0, 0xF3)))
+            foreach (float x in new[] { DsCx - 31, DsCx, DsCx + 31 })
+                g.FillRectangle(mark, x - 2, 104.5f, 4, 2);
 
-        FlatPill(g, new PointF(123, 74), P(PhysicalButton.Create), PressColor(PhysicalButton.Create), create: true);
-        FlatPill(g, new PointF(W - 123, 74), P(PhysicalButton.Options), PressColor(PhysicalButton.Options), create: false);
-
-        FlatDpad(g, new PointF(86, 108), P(PhysicalButton.DpadUp), P(PhysicalButton.DpadDown), P(PhysicalButton.DpadLeft), P(PhysicalButton.DpadRight));
-
-        var face = new PointF(314, 108);
-        FlatFace(g, new PointF(face.X, face.Y - 23), PsSymbol.Triangle, P(PhysicalButton.Triangle), PressColor(PhysicalButton.Triangle));
-        FlatFace(g, new PointF(face.X + 23, face.Y), PsSymbol.Circle, P(PhysicalButton.Circle), PressColor(PhysicalButton.Circle));
-        FlatFace(g, new PointF(face.X, face.Y + 23), PsSymbol.Cross, P(PhysicalButton.Cross), PressColor(PhysicalButton.Cross));
-        FlatFace(g, new PointF(face.X - 23, face.Y), PsSymbol.Square, P(PhysicalButton.Square), PressColor(PhysicalButton.Square));
-
-        FlatStick(g, new PointF(152, 156), _ds.LeftX, _ds.LeftY, P(PhysicalButton.L3));
-        FlatStick(g, new PointF(248, 156), _ds.RightX, _ds.RightY, P(PhysicalButton.R3));
-
-        // PS logo and the mute button.
-        var ps = new PointF(200, 150);
+        // Speaker holes, PS mark and mute slot.
+        using (var hole = new SolidBrush(Color.FromArgb(0x4A, 0x4C, 0x52)))
+        {
+            for (int i = 0; i < 6; i++)
+                g.FillEllipse(hole, DsCx - 12.5f + i * 5 - 0.9f, 117.5f, 1.8f, 1.8f);
+            for (int i = 0; i < 5; i++)
+                g.FillEllipse(hole, DsCx - 10 + i * 5 - 0.9f, 122, 1.8f, 1.8f);
+        }
         bool psOn = P(PhysicalButton.PS);
         if (psOn)
-            Glow(g, ps, 18, Theme.PsBlue, 200);
-        DrawPsLogo(g, ps, psOn ? Color.White : Color.FromArgb(0xC8, 0xCC, 0xD3));
-        var mute = new RectangleF(191, 166, 18, 5);
+            Glow(g, new PointF(DsCx, 134), 14, Theme.PsBlue, 200);
+        using (var psFont = new Font("Segoe UI Black", 10.5f, FontStyle.Italic, GraphicsUnit.Pixel))
+            DrawCentered(g, "PS", psFont, psOn ? Color.White : Color.FromArgb(0x55, 0x57, 0x5E), new PointF(DsCx, 134));
         bool muted = P(PhysicalButton.Mute);
+        var mute = new RectangleF(DsCx - 8, 145, 16, 3.2f);
         if (muted)
-            GlowRect(g, mute, 6, Color.FromArgb(0xFF, 0x8A, 0x3D));
-        using (var mutePath = Theme.RoundedRect(mute, 2.5f))
-        using (var muteBrush = new SolidBrush(muted ? Color.FromArgb(0xFF, 0x9F, 0x5F) : Color.FromArgb(0xC8, 0xCC, 0xD3)))
-            g.FillPath(muteBrush, mutePath);
+            GlowRect(g, mute, 5, Color.FromArgb(0xFF, 0x8A, 0x3D));
+        using (var mutePath = Theme.RoundedRect(mute, 1.6f))
+        using (var muteFill = new SolidBrush(muted ? Color.FromArgb(0xFF, 0x9F, 0x5F) : Color.FromArgb(0x55, 0x57, 0x5E)))
+            g.FillPath(muteFill, mutePath);
+
+        DsPill(g, new PointF(87, 71), P(PhysicalButton.Create), create: true);
+        DsPill(g, new PointF(DsW - 87, 71), P(PhysicalButton.Options), create: false);
+
+        DsDpad(g, new PointF(62, 102), P(PhysicalButton.DpadUp), P(PhysicalButton.DpadDown), P(PhysicalButton.DpadLeft), P(PhysicalButton.DpadRight));
+
+        var face = new PointF(DsW - 62, 102);
+        DsFace(g, new PointF(face.X, face.Y - 20), PsSymbol.Triangle, P(PhysicalButton.Triangle), PressColor(PhysicalButton.Triangle));
+        DsFace(g, new PointF(face.X + 23, face.Y), PsSymbol.Circle, P(PhysicalButton.Circle), PressColor(PhysicalButton.Circle));
+        DsFace(g, new PointF(face.X, face.Y + 20), PsSymbol.Cross, P(PhysicalButton.Cross), PressColor(PhysicalButton.Cross));
+        DsFace(g, new PointF(face.X - 23, face.Y), PsSymbol.Square, P(PhysicalButton.Square), PressColor(PhysicalButton.Square));
+
+        DsStick(g, new PointF(112, 143), _ds.LeftX, _ds.LeftY, P(PhysicalButton.L3));
+        DsStick(g, new PointF(DsW - 112, 143), _ds.RightX, _ds.RightY, P(PhysicalButton.R3));
     }
 
-    static void TriggerMeter(Graphics g, RectangleF r, byte value, bool ticksRight)
+    static GraphicsPath MirroredPath(PointF[] left, float width)
+    {
+        var points = new List<PointF>(left);
+        for (int i = left.Length - 2; i >= 0; i--)
+            points.Add(new PointF(width - left[i].X, left[i].Y));
+        var path = new GraphicsPath();
+        path.AddBeziers(points.ToArray());
+        path.CloseFigure();
+        return path;
+    }
+
+    /// <summary>Trigger meter beside the controller: a pill that fills from the top as L2/R2 is pulled, plus three bars.</summary>
+    static void DsMeter(Graphics g, RectangleF r, byte value, bool barsRight)
     {
         float level = value / 255f;
-        using (var track = Theme.RoundedRect(r, r.Width / 2))
+        using (var pill = Theme.RoundedRect(r, r.Width / 2))
         {
-            using var back = new SolidBrush(Color.FromArgb(0x26, 0x28, 0x2D));
-            g.FillPath(back, track);
-            if (level > 0.01f)
+            using var back = new SolidBrush(Color.FromArgb(0x22, 0x23, 0x27));
+            g.FillPath(back, pill);
+            var inner = RectangleF.Inflate(r, -3, -3);
+            float h = Math.Max(inner.Height * level, level > 0.01f ? inner.Width : 0);
+            if (h > 0)
             {
-                var state = g.Save();
-                g.SetClip(track);
-                float h = r.Height * level;
-                using var fill = new SolidBrush(FlatTrigger);
-                g.FillRectangle(fill, r.X, r.Bottom - h, r.Width, h);
-                g.Restore(state);
+                using var fillPath = Theme.RoundedRect(new RectangleF(inner.X, inner.Y, inner.Width, Math.Min(h, inner.Height)), inner.Width / 2);
+                using var fill = new SolidBrush(DsMeterRed);
+                g.FillPath(fill, fillPath);
             }
-            using var pen = new Pen(Color.FromArgb(0xE6, 0xE8, 0xEC), 1.6f);
-            g.DrawPath(pen, track);
+            using var pen = new Pen(Color.FromArgb(0x8E, 0x90, 0x96), 2f);
+            g.DrawPath(pen, pill);
         }
-        // Three ticks beside the pill; they light up as the trigger passes each third.
-        float x0 = ticksRight ? r.Right + 4 : r.X - 4;
+        float[] lengths = { 13, 9.5f, 5.5f };
+        float[] ys = { 31, 38.5f, 46 };
         for (int i = 0; i < 3; i++)
         {
-            float y = r.Y + r.Height * (0.28f + i * 0.22f);
-            float len = 9 - i * 1.5f;
-            bool lit = level >= (3 - i) / 3f - 0.01f;
-            using var tick = new Pen(lit ? FlatTrigger : Color.FromArgb(0x7A, 0x7E, 0x86), 2.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-            g.DrawLine(tick, x0, y, ticksRight ? x0 + len : x0 - len, y);
+            bool lit = level >= (i + 1) / 3f - 0.01f;
+            using var bar = new Pen(lit ? DsMeterRed : Color.FromArgb(0x8E, 0x90, 0x96), 3f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            float x0 = barsRight ? r.Right + 4 : r.X - 4;
+            g.DrawLine(bar, x0, ys[i], barsRight ? x0 + lengths[i] : x0 - lengths[i], ys[i]);
         }
     }
 
-    static void FlatShoulder(Graphics g, RectangleF r, float radius, string label, bool pressed, Color color)
+    static void DsShoulder(Graphics g, bool right, byte l2, bool l1)
     {
-        if (pressed)
-            GlowRect(g, r, 7, Theme.PsBlue, 150);
-        using var path = Theme.RoundedRect(r, radius);
-        using var fill = new SolidBrush(pressed ? Theme.PsBlue : color);
-        g.FillPath(fill, path);
-        DrawCentered(g, label, TinyFont, pressed ? Color.White : Color.FromArgb(0xC8, 0xCC, 0xD3), new PointF(r.X + r.Width / 2, r.Y + 8));
+        PointF[] Side(PointF[] pts) => right ? Mirror(pts) : pts;
+        var blob = Side(new PointF[] { new(67, 8), new(82, 11), new(89, 24), new(93, 40), new(97, 51), new(66, 52), new(41, 52), new(37, 41), new(44, 24), new(54, 12) });
+        using var path = new GraphicsPath();
+        path.AddClosedCurve(blob, 0.5f);
+
+        bool l2Down = l2 > 20;
+        if (l1 || l2Down)
+            GlowRect(g, path.GetBounds(), 6, Theme.PsBlue, 120);
+        using (var back = new SolidBrush(l2Down ? Color.FromArgb(0x2C, 0x5C, 0xC8) : DsTriggerBack))
+            g.FillPath(back, path);
+
+        // L1/R1: the lower, front part of the cap.
+        var state = g.Save();
+        g.SetClip(path);
+        using (var front = new GraphicsPath())
+        {
+            front.AddClosedCurve(Side(new PointF[] { new(38, 34), new(60, 25), new(86, 24), new(95, 36), new(98, 54), new(36, 54) }), 0.4f);
+            using var fill = new SolidBrush(l1 ? Theme.PsBlue : DsBlack);
+            g.FillPath(fill, front);
+            using var edge = new Pen(DsBlackEdge, 0.9f);
+            g.DrawPath(edge, front);
+        }
+        g.Restore(state);
+
+        using var font = new Font("Segoe UI Semibold", 4.6f, GraphicsUnit.Pixel);
+        var l2At = right ? Mirror(new PointF(77, 18)) : new PointF(77, 18);
+        var l1At = right ? Mirror(new PointF(77, 30)) : new PointF(77, 30);
+        DrawCentered(g, right ? "R2" : "L2", font, Color.FromArgb(0xB4, 0xB7, 0xBD), l2At);
+        DrawCentered(g, right ? "R1" : "L1", font, Color.FromArgb(0xB4, 0xB7, 0xBD), l1At);
     }
 
-    static void FlatPill(Graphics g, PointF c, bool pressed, Color color, bool create)
+    static void DsPill(Graphics g, PointF c, bool pressed, bool create)
     {
-        var r = new RectangleF(c.X - 4.5f, c.Y - 9, 9, 18);
+        var r = new RectangleF(c.X - 4.5f, c.Y - 7, 9, 14);
         if (pressed)
-            GlowRect(g, r, 6, color);
+            GlowRect(g, r, 5, Theme.PsBlue);
         using (var path = Theme.RoundedRect(r, 4.5f))
         {
-            using var fill = new SolidBrush(pressed ? color : Color.White);
-            using var pen = new Pen(pressed ? color : FlatInk, 1.1f);
+            using var fill = new LinearGradientBrush(r, pressed ? Theme.PsBlue : Color.FromArgb(0xE6, 0xE9, 0xEE),
+                pressed ? ControlPaint.Dark(Theme.PsBlue, 0.1f) : Color.FromArgb(0xC9, 0xCE, 0xD6), LinearGradientMode.Horizontal);
+            using var pen = new Pen(Color.FromArgb(0xB2, 0xB8, 0xC1), 0.8f);
             g.FillPath(fill, path);
             g.DrawPath(pen, path);
         }
-        // Tiny icon above: three rays for Create, three lines for Options.
-        using var ink = new Pen(pressed ? color : Color.FromArgb(0x8A, 0x8F, 0x98), 0.9f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-        float top = c.Y - 14;
+        using var ink = new Pen(Color.FromArgb(0x9A, 0x9F, 0xA8), 0.8f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+        float top = c.Y - 10;
         if (create)
         {
-            g.DrawLine(ink, c.X, top - 3, c.X, top);
-            g.DrawLine(ink, c.X - 3, top - 2, c.X - 2, top);
-            g.DrawLine(ink, c.X + 3, top - 2, c.X + 2, top);
+            g.DrawLine(ink, c.X, top - 3, c.X, top - 0.5f);
+            g.DrawLine(ink, c.X - 2.6f, top - 2.2f, c.X - 1.6f, top - 0.4f);
+            g.DrawLine(ink, c.X + 2.6f, top - 2.2f, c.X + 1.6f, top - 0.4f);
         }
         else
         {
             for (int i = 0; i < 3; i++)
-                g.DrawLine(ink, c.X - 2.5f, top - 3 + i * 1.5f, c.X + 2.5f, top - 3 + i * 1.5f);
+                g.DrawLine(ink, c.X - 2.4f, top - 3 + i * 1.3f, c.X + 2.4f, top - 3 + i * 1.3f);
         }
     }
 
-    static void FlatDpad(Graphics g, PointF c, bool up, bool down, bool left, bool right)
+    static void DsDpad(Graphics g, PointF c, bool up, bool down, bool left, bool right)
     {
-        void Key(PointF[] shape, PointF center, bool pressed, float angle)
+        // Four black keys, each a rounded block that narrows to a point toward the middle.
+        void Key(bool pressed, float angle)
         {
-            using var path = new GraphicsPath();
-            path.AddPolygon(shape);
-            if (pressed)
-                Glow(g, center, 18, Theme.PsBlue, 190);
-            using var fill = new SolidBrush(pressed ? Theme.PsBlue : FlatInk);
-            g.FillPath(fill, path);
-            using var round = new Pen(pressed ? Theme.PsBlue : FlatInk, 3f) { LineJoin = LineJoin.Round };
-            g.DrawPath(round, path);
-
             var state = g.Save();
-            g.TranslateTransform(center.X, center.Y);
+            g.TranslateTransform(c.X, c.Y);
             g.RotateTransform(angle);
-            using var arrow = new SolidBrush(Color.White);
-            g.FillPolygon(arrow, new PointF[] { new(0, -3.4f), new(3.4f, 1.8f), new(-3.4f, 1.8f) });
+            using var path = new GraphicsPath();
+            path.AddClosedCurve(new PointF[] { new(-8.5f, -23), new(8.5f, -23), new(9.5f, -10), new(0, -3.5f), new(-9.5f, -10) }, 0.22f);
+            if (pressed)
+                Glow(g, new PointF(0, -13), 15, Theme.PsBlue, 190);
+            using var fill = new SolidBrush(pressed ? Theme.PsBlue : DsBlack);
+            g.FillPath(fill, path);
+            using var arrow = new SolidBrush(Color.FromArgb(0xEE, 0xF0, 0xF3));
+            g.FillPolygon(arrow, new PointF[] { new(0, -17.5f), new(2.2f, -14.5f), new(-2.2f, -14.5f) });
             g.Restore(state);
         }
 
-        float x = c.X, y = c.Y;
-        Key(new PointF[] { new(x - 7.5f, y - 24), new(x + 7.5f, y - 24), new(x + 7.5f, y - 12), new(x, y - 6), new(x - 7.5f, y - 12) }, new(x, y - 16), up, 0);
-        Key(new PointF[] { new(x - 7.5f, y + 24), new(x + 7.5f, y + 24), new(x + 7.5f, y + 12), new(x, y + 6), new(x - 7.5f, y + 12) }, new(x, y + 16), down, 180);
-        Key(new PointF[] { new(x - 24, y - 7.5f), new(x - 24, y + 7.5f), new(x - 12, y + 7.5f), new(x - 6, y), new(x - 12, y - 7.5f) }, new(x - 16, y), left, 270);
-        Key(new PointF[] { new(x + 24, y - 7.5f), new(x + 24, y + 7.5f), new(x + 12, y + 7.5f), new(x + 6, y), new(x + 12, y - 7.5f) }, new(x + 16, y), right, 90);
+        Key(up, 0);
+        Key(right, 90);
+        Key(down, 180);
+        Key(left, 270);
     }
 
-    static void FlatFace(Graphics g, PointF c, PsSymbol symbol, bool pressed, Color color)
+    static void DsFace(Graphics g, PointF c, PsSymbol symbol, bool pressed, Color color)
     {
-        const float r = 11.5f;
+        const float r = 10.5f;
         var rect = new RectangleF(c.X - r, c.Y - r, r * 2, r * 2);
         if (pressed)
-            Glow(g, c, r * 2.2f, color, 200);
-        using (var fill = new SolidBrush(pressed ? color : Color.White))
-        using (var rim = new Pen(FlatInk, 1.6f))
+            Glow(g, c, r * 2f, color, 120);
+        using (var fill = new SolidBrush(Color.FromArgb(0x2A, 0x2B, 0x2F)))
+        using (var rim = new Pen(pressed ? DsRing : Color.FromArgb(0x16, 0x17, 0x1A), pressed ? 2f : 1.2f))
         {
             g.FillEllipse(fill, rect);
             g.DrawEllipse(rim, rect);
         }
 
-        using var pen = new Pen(pressed ? Color.White : FlatInk, 1.7f) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round };
+        using var pen = new Pen(pressed ? color : DsSymbol, pressed ? 1.9f : 1.1f) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round };
         switch (symbol)
         {
             case PsSymbol.Triangle:
-                g.DrawPolygon(pen, new PointF[] { new(c.X, c.Y - 5.6f), new(c.X + 5.6f, c.Y + 3.8f), new(c.X - 5.6f, c.Y + 3.8f) });
+                g.DrawPolygon(pen, new PointF[] { new(c.X, c.Y - 5.6f), new(c.X + 5.9f, c.Y + 4f), new(c.X - 5.9f, c.Y + 4f) });
                 break;
             case PsSymbol.Circle:
-                g.DrawEllipse(pen, c.X - 5.4f, c.Y - 5.4f, 10.8f, 10.8f);
+                g.DrawEllipse(pen, c.X - 5.6f, c.Y - 5.6f, 11.2f, 11.2f);
                 break;
             case PsSymbol.Cross:
-                g.DrawLine(pen, c.X - 4.8f, c.Y - 4.8f, c.X + 4.8f, c.Y + 4.8f);
-                g.DrawLine(pen, c.X + 4.8f, c.Y - 4.8f, c.X - 4.8f, c.Y + 4.8f);
+                g.DrawLine(pen, c.X - 5, c.Y - 5, c.X + 5, c.Y + 5);
+                g.DrawLine(pen, c.X + 5, c.Y - 5, c.X - 5, c.Y + 5);
                 break;
             case PsSymbol.Square:
-                g.DrawRectangle(pen, c.X - 4.6f, c.Y - 4.6f, 9.2f, 9.2f);
+                g.DrawRectangle(pen, c.X - 5.2f, c.Y - 4.6f, 10.4f, 9.2f);
                 break;
         }
     }
 
-    static void FlatStick(Graphics g, PointF c, short x, short y, bool pressed)
+    static void DsStick(Graphics g, PointF c, short x, short y, bool pressed)
     {
-        const float well = 24, cap = 17, travel = 8;
-        using (var wellBrush = new SolidBrush(Color.FromArgb(0x0B, 0x0C, 0x0E)))
-            g.FillEllipse(wellBrush, c.X - well, c.Y - well, well * 2, well * 2);
-
+        const float cap = 18.5f, travel = 5;
         var k = new PointF(c.X + x / 32768f * travel, c.Y - y / 32768f * travel);
         if (pressed)
-            Glow(g, k, cap + 12, Theme.PsBlue, 200);
-        using (var capFill = new SolidBrush(pressed ? Theme.PsBlue : Color.FromArgb(0x2E, 0x31, 0x38)))
+            Glow(g, k, cap + 9, Theme.PsBlue, 170);
+        using (var capFill = new SolidBrush(Color.FromArgb(0x2B, 0x2E, 0x3E)))
             g.FillEllipse(capFill, k.X - cap, k.Y - cap, cap * 2, cap * 2);
-        using (var ring = new Pen(pressed ? Color.FromArgb(0xBF, 0xD6, 0xFF) : Color.FromArgb(0x55, 0x5A, 0x64), 1.4f))
-            g.DrawEllipse(ring, k.X - 11, k.Y - 11, 22, 22);
-        using (var dish = new SolidBrush(pressed ? ControlPaint.Dark(Theme.PsBlue, 0.1f) : Color.FromArgb(0x24, 0x27, 0x2D)))
-            g.FillEllipse(dish, k.X - 10, k.Y - 10, 20, 20);
-    }
-
-    /// <summary>A simple "P/S"-style mark drawn as two strokes (not the trademark logo).</summary>
-    static void DrawPsLogo(Graphics g, PointF c, Color color)
-    {
-        using var font = new Font("Segoe UI Black", 9f, GraphicsUnit.Pixel);
-        DrawCentered(g, "PS", font, color, c);
+        using (var edge = new Pen(pressed ? DsRing : Color.FromArgb(0x12, 0x13, 0x18), pressed ? 2f : 1.2f))
+            g.DrawEllipse(edge, k.X - cap, k.Y - cap, cap * 2, cap * 2);
+        using (var ring = new Pen(pressed ? Color.FromArgb(0xBF, 0xD6, 0xFF) : Color.FromArgb(0x8E, 0x92, 0xA6), 0.8f))
+            g.DrawEllipse(ring, k.X - 12.5f, k.Y - 11, 25, 25);
     }
 
     enum PsSymbol
