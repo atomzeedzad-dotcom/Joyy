@@ -517,26 +517,24 @@ internal sealed class PadView : Control
     // The DualSense drawing has its own design space (wider and flatter than the Xbox one).
     const float DsW = 327, DsH = 192, DsCx = DsW / 2;
 
-    static readonly Color DsShell = Color.FromArgb(0xF3, 0xF6, 0xFA);
-    static readonly Color DsShellRim = Color.FromArgb(0xC4, 0xCA, 0xD3);
-    static readonly Color DsBlack = Color.FromArgb(0x1D, 0x1E, 0x21);
-    static readonly Color DsBlackEdge = Color.FromArgb(0x38, 0x3A, 0x40);
-    static readonly Color DsTriggerBack = Color.FromArgb(0x2C, 0x2D, 0x32);
+    static readonly Color DsShellTop = Color.FromArgb(0xFB, 0xFC, 0xFE);
+    static readonly Color DsShellBottom = Color.FromArgb(0xD9, 0xDE, 0xE6);
     static readonly Color DsSymbol = Color.FromArgb(0xD2, 0xD5, 0xDA);
     static readonly Color DsMeterRed = Color.FromArgb(0xE0, 0x4F, 0x55);
     static readonly Color DsLightBar = Color.FromArgb(0x2E, 0x78, 0xD8);
     static readonly Color DsRing = Color.FromArgb(0x4B, 0x3B, 0xF0);
 
     // Left half of the shell, top center to bottom center (cubic Beziers); mirrored for the right.
+    // Measured from the reference: outer edge x 37@40, 20@80, 9@120-140, 15@164, 26@180, tip ~ (36, 187).
     static readonly PointF[] DsShellOutline =
     {
         new(DsCx, 38),
-        new(120, 38), new(58, 38), new(42, 43),
-        new(28, 48), new(20, 64), new(16, 84),
-        new(11, 106), new(6, 128), new(8, 148),
-        new(10, 166), new(20, 182), new(33, 187),
-        new(42, 190), new(48, 182), new(56, 172),
-        new(64, 162), new(70, 154), new(84, 151),
+        new(110, 38), new(56, 37), new(40, 41),
+        new(31, 47), new(23, 63), new(18, 84),
+        new(13, 104), new(8, 124), new(9, 146),
+        new(10, 164), new(21, 180), new(32, 186),
+        new(40, 189), new(49, 184), new(58, 176),
+        new(64, 167), new(70, 157), new(82, 151),
         new(110, 150), new(140, 151), new(DsCx, 151),
     };
 
@@ -557,15 +555,35 @@ internal sealed class PadView : Control
 
     static PointF[] Mirror(PointF[] points) => points.Select(Mirror).ToArray();
 
-    /// <summary>Flat, illustration-style DualSense: white wings, black center and touchpad, black shoulders.</summary>
+    /// <summary>Soft shadow of a shape: a few offset copies at low opacity.</summary>
+    static void DropShadow(Graphics g, GraphicsPath path, float dy, int alpha, int steps = 4)
+    {
+        for (int i = steps; i >= 1; i--)
+        {
+            using var copy = (GraphicsPath)path.Clone();
+            using var m = new Matrix();
+            m.Translate(0, dy * i / steps);
+            copy.Transform(m);
+            using var brush = new SolidBrush(Color.FromArgb(alpha / steps, 0, 0, 0));
+            g.FillPath(brush, copy);
+        }
+    }
+
+    static void FillVertical(Graphics g, GraphicsPath path, Color top, Color bottom)
+    {
+        var b = path.GetBounds();
+        using var brush = new LinearGradientBrush(new RectangleF(b.X, b.Y - 1, b.Width, b.Height + 2), top, bottom, LinearGradientMode.Vertical);
+        g.FillPath(brush, path);
+    }
+
+    /// <summary>Flat-shaded DualSense: white wings, black center and touchpad, black shoulders.</summary>
     void DrawDualSense(Graphics g)
     {
         bool P(PhysicalButton b) => _ds.IsPressed(b);
 
-        // Soft violet halo so the black parts stand out from a black window.
+        // Soft violet halo so the black parts stand out from a black window (kept inside the design box).
         using (var halo = new GraphicsPath())
         {
-            // Kept inside the design box: past it the control's edge would cut the fade off.
             halo.AddEllipse(-24, 2, DsW + 48, DsH - 4);
             using var brush = new PathGradientBrush(halo)
             {
@@ -576,24 +594,37 @@ internal sealed class PadView : Control
             g.FillPath(brush, halo);
         }
 
-        DsMeter(g, new RectangleF(8, 23, 12, 30), _ds.L2, barsRight: true);
-        DsMeter(g, new RectangleF(DsW - 20, 23, 12, 30), _ds.R2, barsRight: false);
+        DsMeter(g, new RectangleF(9, 24, 10, 28), _ds.L2, barsRight: true);
+        DsMeter(g, new RectangleF(DsW - 19, 24, 10, 28), _ds.R2, barsRight: false);
 
-        // Shell.
         using var shell = MirroredPath(DsShellOutline, DsW);
-        using (var fill = new SolidBrush(DsShell))
-            g.FillPath(fill, shell);
-        // Rim everywhere except the lower edge between the grips, which the black center owns.
-        var rimClip = g.Save();
-        g.ExcludeClip(Rectangle.Round(new RectangleF(74, 144, DsW - 148, 30)));
-        using (var shellRim = new Pen(DsShellRim, 1f))
-            g.DrawPath(shellRim, shell);
-        g.Restore(rimClip);
+        DropShadow(g, shell, 5, 120, 5);
 
-        // Black center (touchpad and everything under it) and the black strips down the inside of
-        // each grip, clipped to the shell; stick wells hang below the shell's lower edge.
+        // Shell: lit from above, falling off toward the grips, with a darker band around the edge
+        // so the wings read as rounded.
+        FillVertical(g, shell, DsShellTop, DsShellBottom);
         var clip = g.Save();
         g.SetClip(shell);
+        using (var edge = new Pen(Color.FromArgb(38, 0x5A, 0x64, 0x78), 7f))
+            g.DrawPath(edge, shell);
+        using (var edge2 = new Pen(Color.FromArgb(30, 0x5A, 0x64, 0x78), 3f))
+            g.DrawPath(edge2, shell);
+        foreach (bool right in new[] { false, true })
+        {
+            // Highlight on the upper wing.
+            var hi = new RectangleF(right ? DsW - 70 : 22, 52, 48, 60);
+            using var hiPath = new GraphicsPath();
+            hiPath.AddEllipse(hi);
+            using var hiBrush = new PathGradientBrush(hiPath)
+            {
+                CenterColor = Color.FromArgb(150, Color.White),
+                SurroundColors = new[] { Color.FromArgb(0, Color.White) },
+            };
+            g.FillPath(hiBrush, hiPath);
+        }
+
+        // Black center (touchpad and everything under it) and the black strips down the inside of
+        // each grip, clipped to the shell.
         var centerLeft = new PointF[]
         {
             new(DsCx, 40), new(98, 40), new(94, 42), new(94, 60),
@@ -606,69 +637,84 @@ internal sealed class PadView : Control
             var pts = new List<PointF>(centerLeft) { new(30, 205), new(DsW - 30, 205) };
             pts.AddRange(Mirror(centerLeft).Reverse().SkipLast(1));
             center.AddClosedCurve(pts.ToArray(), 0.25f);
-            using var black = new SolidBrush(DsBlack);
-            g.FillPath(black, center);
+            FillVertical(g, center, Color.FromArgb(0x26, 0x27, 0x2B), Color.FromArgb(0x13, 0x14, 0x16));
+            // Thin lit edge where the black meets the white wing.
+            using var lip = new Pen(Color.FromArgb(70, 0x9A, 0xA2, 0xB0), 1f);
+            g.DrawPath(lip, center);
         }
         // White rim along the inner edge of each grip, inside the black strip.
         foreach (bool right in new[] { false, true })
         {
             using var rimPath = new GraphicsPath();
-            var rim = new PointF[] { new(76, 152), new(70, 160), new(64, 170), new(56, 180), new(50, 192) };
+            var rim = new PointF[] { new(76, 152), new(70, 160), new(64, 170), new(57, 180), new(51, 191) };
             rimPath.AddCurve(right ? Mirror(rim) : rim, 0.4f);
-            using var pen = new Pen(DsShell, 6f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            using var pen = new Pen(Color.FromArgb(0xE2, 0xE6, 0xEC), 5f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
             g.DrawPath(pen, rimPath);
         }
         g.Restore(clip);
+
+        // Rim everywhere except the lower edge between the grips, which the black center owns.
+        var rimClip = g.Save();
+        g.ExcludeClip(Rectangle.Round(new RectangleF(74, 144, DsW - 148, 30)));
+        using (var shellRim = new Pen(Color.FromArgb(0xB4, 0xBB, 0xC6), 0.9f))
+            g.DrawPath(shellRim, shell);
+        g.Restore(rimClip);
         // Cover the white shell's anti-aliased fringe along the black lower edge between the grips.
-        using (var seam = new SolidBrush(DsBlack))
+        using (var seam = new SolidBrush(Color.FromArgb(0x13, 0x14, 0x16)))
             g.FillRectangle(seam, 80, 148.6f, DsW - 160, 3);
 
+        // Stick wells: a dark ring with a shadow inside its top edge.
         foreach (var c in new[] { new PointF(112, 142), new PointF(DsW - 112, 142) })
         {
-            using var well = new SolidBrush(Color.FromArgb(0x2A, 0x2B, 0x31));
-            g.FillEllipse(well, c.X - 24, c.Y - 22, 48, 44);
-            using var wellEdge = new Pen(Color.FromArgb(0x15, 0x16, 0x19), 1.2f);
-            g.DrawEllipse(wellEdge, c.X - 24, c.Y - 22, 48, 44);
+            var r = new RectangleF(c.X - 24, c.Y - 22, 48, 44);
+            using var wellPath = new GraphicsPath();
+            wellPath.AddEllipse(r);
+            FillVertical(g, wellPath, Color.FromArgb(0x16, 0x17, 0x1A), Color.FromArgb(0x33, 0x35, 0x3B));
+            using var wellEdge = new Pen(Color.FromArgb(0x0E, 0x0F, 0x11), 1.2f);
+            g.DrawEllipse(wellEdge, r);
         }
 
-        // Shoulders: big black caps over the top of each wing, L2 behind L1.
+        // Shoulders: black caps over the top of each wing, L2 behind L1.
         DsShoulder(g, right: false, l2: _ds.L2, l1: P(PhysicalButton.L1));
         DsShoulder(g, right: true, l2: _ds.R2, l1: P(PhysicalButton.R1));
 
-        // White strip across the top with the slot in the middle.
+        // White strip across the top (a raised lip) with the slot in the middle.
         var strip = new RectangleF(86, 30, DsW - 172, 12);
         using (var stripPath = Theme.RoundedRect(strip, 6))
-        using (var stripFill = new SolidBrush(DsShell))
-        using (var stripRim = new Pen(DsShellRim, 0.8f))
         {
-            g.FillPath(stripFill, stripPath);
+            DropShadow(g, stripPath, 2.5f, 140, 3);
+            FillVertical(g, stripPath, Color.White, Color.FromArgb(0xD3, 0xD8, 0xE0));
+            using var stripRim = new Pen(Color.FromArgb(0xA8, 0xAF, 0xBA), 0.7f);
             g.DrawPath(stripRim, stripPath);
         }
-        using (var slot = Theme.RoundedRect(new RectangleF(DsCx - 9, 33.6f, 18, 3), 1.5f))
-        using (var slotFill = new SolidBrush(Color.FromArgb(0x3A, 0x3C, 0x42)))
-            g.FillPath(slotFill, slot);
+        using (var slot = Theme.RoundedRect(new RectangleF(DsCx - 9, 33.4f, 18, 3.2f), 1.6f))
+        {
+            FillVertical(g, slot, Color.FromArgb(0x22, 0x23, 0x27), Color.FromArgb(0x4A, 0x4D, 0x55));
+        }
 
         // Touchpad: dot grid on black, light bar down both sides, three marks along the bottom.
         bool touch = P(PhysicalButton.Touchpad);
         var pad = new RectangleF(97, 43, DsW - 194, 64);
         if (touch)
             GlowRect(g, pad, 6, Theme.PsBlue, 120);
-        using (var dot = new SolidBrush(touch ? Color.FromArgb(0x8F, 0xB6, 0xFF) : Color.FromArgb(0x86, 0x88, 0x8E)))
+        for (int row = 0; row < 13; row++)
         {
-            for (int row = 0; row < 13; row++)
-            {
-                float y = 47.5f + row * 4.5f;
-                float shift = row % 2 == 0 ? 0 : 2.25f;
-                for (float x = 101.5f + shift; x < DsW - 100; x += 4.5f)
-                    g.FillEllipse(dot, x - 0.85f, y - 0.85f, 1.7f, 1.7f);
-            }
+            float y = 47.5f + row * 4.5f;
+            float shift = row % 2 == 0 ? 0 : 2.25f;
+            // Dots fade slightly toward the bottom, like light falling across the pad.
+            int a = 255 - row * 7;
+            using var dot = new SolidBrush(touch ? Color.FromArgb(a, 0x8F, 0xB6, 0xFF) : Color.FromArgb(a, 0x8C, 0x8F, 0x96));
+            for (float x = 101.5f + shift; x < DsW - 100; x += 4.5f)
+                g.FillEllipse(dot, x - 0.85f, y - 0.85f, 1.7f, 1.7f);
         }
         foreach (bool right in new[] { false, true })
         {
             var bar = new PointF[] { new(96.5f, 43), new(96.5f, 70), new(97.5f, 95), new(101, 106) };
             using var path = new GraphicsPath();
             path.AddBeziers(right ? Mirror(bar) : bar);
-            using var pen = new Pen(touch ? Theme.PsBlue : DsLightBar, 2.4f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            using (var glow = new Pen(Color.FromArgb(70, touch ? Theme.PsBlue : DsLightBar), 5f) { StartCap = LineCap.Round, EndCap = LineCap.Round })
+                g.DrawPath(glow, path);
+            using var pen = new Pen(touch ? Theme.PsBlue : DsLightBar, 2.2f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
             g.DrawPath(pen, path);
         }
         using (var mark = new SolidBrush(Color.FromArgb(0xEE, 0xF0, 0xF3)))
@@ -693,8 +739,8 @@ internal sealed class PadView : Control
         if (muted)
             GlowRect(g, mute, 5, Color.FromArgb(0xFF, 0x8A, 0x3D));
         using (var mutePath = Theme.RoundedRect(mute, 1.6f))
-        using (var muteFill = new SolidBrush(muted ? Color.FromArgb(0xFF, 0x9F, 0x5F) : Color.FromArgb(0x55, 0x57, 0x5E)))
-            g.FillPath(muteFill, mutePath);
+            FillVertical(g, mutePath, muted ? Color.FromArgb(0xFF, 0xB0, 0x7A) : Color.FromArgb(0x6A, 0x6D, 0x75),
+                muted ? Color.FromArgb(0xFF, 0x8A, 0x3D) : Color.FromArgb(0x40, 0x42, 0x48));
 
         DsPill(g, new PointF(87, 71), P(PhysicalButton.Create), create: true);
         DsPill(g, new PointF(DsW - 87, 71), P(PhysicalButton.Options), create: false);
@@ -728,25 +774,23 @@ internal sealed class PadView : Control
         float level = value / 255f;
         using (var pill = Theme.RoundedRect(r, r.Width / 2))
         {
-            using var back = new SolidBrush(Color.FromArgb(0x22, 0x23, 0x27));
-            g.FillPath(back, pill);
-            var inner = RectangleF.Inflate(r, -3, -3);
+            FillVertical(g, pill, Color.FromArgb(0x16, 0x17, 0x1A), Color.FromArgb(0x2A, 0x2B, 0x30));
+            var inner = RectangleF.Inflate(r, -2.5f, -2.5f);
             float h = Math.Max(inner.Height * level, level > 0.01f ? inner.Width : 0);
             if (h > 0)
             {
                 using var fillPath = Theme.RoundedRect(new RectangleF(inner.X, inner.Y, inner.Width, Math.Min(h, inner.Height)), inner.Width / 2);
-                using var fill = new SolidBrush(DsMeterRed);
-                g.FillPath(fill, fillPath);
+                FillVertical(g, fillPath, Color.FromArgb(0xFF, 0x7A, 0x7F), DsMeterRed);
             }
-            using var pen = new Pen(Color.FromArgb(0x8E, 0x90, 0x96), 2f);
+            using var pen = new Pen(Color.FromArgb(0x9A, 0x9C, 0xA2), 1.6f);
             g.DrawPath(pen, pill);
         }
-        float[] lengths = { 13, 9.5f, 5.5f };
-        float[] ys = { 31, 38.5f, 46 };
+        float[] lengths = { 12, 8.5f, 5 };
+        float[] ys = { 31, 38, 45 };
         for (int i = 0; i < 3; i++)
         {
             bool lit = level >= (i + 1) / 3f - 0.01f;
-            using var bar = new Pen(lit ? DsMeterRed : Color.FromArgb(0x8E, 0x90, 0x96), 3f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
+            using var bar = new Pen(lit ? DsMeterRed : Color.FromArgb(0x8E, 0x90, 0x96), 2.4f) { StartCap = LineCap.Round, EndCap = LineCap.Round };
             float x0 = barsRight ? r.Right + 4 : r.X - 4;
             g.DrawLine(bar, x0, ys[i], barsRight ? x0 + lengths[i] : x0 - lengths[i], ys[i]);
         }
@@ -755,34 +799,38 @@ internal sealed class PadView : Control
     static void DsShoulder(Graphics g, bool right, byte l2, bool l1)
     {
         PointF[] Side(PointF[] pts) => right ? Mirror(pts) : pts;
-        var blob = Side(new PointF[] { new(67, 8), new(82, 11), new(89, 24), new(93, 40), new(97, 51), new(66, 52), new(41, 52), new(37, 41), new(44, 24), new(54, 12) });
+        // Measured: top ~ (68, 9), outer side x 54@18 / 46@30 / 40@40, inner side x 86 from y 15 to 36.
+        var blob = Side(new PointF[] { new(62, 10), new(74, 9), new(83, 13), new(87, 23), new(88, 35), new(95, 43), new(97, 50), new(70, 52), new(41, 51), new(38, 44), new(43, 31), new(51, 18) });
         using var path = new GraphicsPath();
-        path.AddClosedCurve(blob, 0.5f);
+        path.AddClosedCurve(blob, 0.35f);
 
         bool l2Down = l2 > 20;
         if (l1 || l2Down)
             GlowRect(g, path.GetBounds(), 6, Theme.PsBlue, 120);
-        using (var back = new SolidBrush(l2Down ? Color.FromArgb(0x2C, 0x5C, 0xC8) : DsTriggerBack))
-            g.FillPath(back, path);
+        DropShadow(g, path, 2.5f, 120, 3);
+        // L2/R2: the back, upper part of the cap, lit on top.
+        FillVertical(g, path, l2Down ? Color.FromArgb(0x5A, 0x8C, 0xF0) : Color.FromArgb(0x4A, 0x4C, 0x53),
+            l2Down ? Color.FromArgb(0x24, 0x52, 0xB8) : Color.FromArgb(0x1E, 0x1F, 0x23));
 
         // L1/R1: the lower, front part of the cap.
         var state = g.Save();
         g.SetClip(path);
         using (var front = new GraphicsPath())
         {
-            front.AddClosedCurve(Side(new PointF[] { new(38, 34), new(60, 25), new(86, 24), new(95, 36), new(98, 54), new(36, 54) }), 0.4f);
-            using var fill = new SolidBrush(l1 ? Theme.PsBlue : DsBlack);
-            g.FillPath(fill, front);
-            using var edge = new Pen(DsBlackEdge, 0.9f);
+            front.AddClosedCurve(Side(new PointF[] { new(38, 34), new(60, 26), new(86, 25), new(95, 36), new(98, 54), new(36, 54) }), 0.4f);
+            FillVertical(g, front, l1 ? Color.FromArgb(0x7A, 0xA6, 0xFF) : Color.FromArgb(0x30, 0x31, 0x36),
+                l1 ? Theme.PsBlue : Color.FromArgb(0x16, 0x17, 0x19));
+            // Lit top edge of the bumper.
+            using var edge = new Pen(Color.FromArgb(l1 ? 200 : 110, 0xB8, 0xBE, 0xC8), 0.8f);
             g.DrawPath(edge, front);
         }
         g.Restore(state);
 
-        using var font = new Font("Segoe UI Semibold", 4.6f, GraphicsUnit.Pixel);
+        using var font = new Font("Segoe UI Semibold", 4.4f, GraphicsUnit.Pixel);
         var l2At = right ? Mirror(new PointF(77, 18)) : new PointF(77, 18);
-        var l1At = right ? Mirror(new PointF(77, 30)) : new PointF(77, 30);
-        DrawCentered(g, right ? "R2" : "L2", font, Color.FromArgb(0xB4, 0xB7, 0xBD), l2At);
-        DrawCentered(g, right ? "R1" : "L1", font, Color.FromArgb(0xB4, 0xB7, 0xBD), l1At);
+        var l1At = right ? Mirror(new PointF(77, 31)) : new PointF(77, 31);
+        DrawCentered(g, right ? "R2" : "L2", font, Color.FromArgb(0xC4, 0xC7, 0xCD), l2At);
+        DrawCentered(g, right ? "R1" : "L1", font, Color.FromArgb(0xC4, 0xC7, 0xCD), l1At);
     }
 
     static void DsPill(Graphics g, PointF c, bool pressed, bool create)
@@ -792,9 +840,10 @@ internal sealed class PadView : Control
             GlowRect(g, r, 5, Theme.PsBlue);
         using (var path = Theme.RoundedRect(r, 4.5f))
         {
-            using var fill = new LinearGradientBrush(r, pressed ? Theme.PsBlue : Color.FromArgb(0xE6, 0xE9, 0xEE),
-                pressed ? ControlPaint.Dark(Theme.PsBlue, 0.1f) : Color.FromArgb(0xC9, 0xCE, 0xD6), LinearGradientMode.Horizontal);
-            using var pen = new Pen(Color.FromArgb(0xB2, 0xB8, 0xC1), 0.8f);
+            DropShadow(g, path, 1.5f, 90, 2);
+            using var fill = new LinearGradientBrush(r, pressed ? Theme.PsBlue : Color.FromArgb(0xEC, 0xEF, 0xF3),
+                pressed ? ControlPaint.Dark(Theme.PsBlue, 0.1f) : Color.FromArgb(0xC2, 0xC8, 0xD1), LinearGradientMode.Horizontal);
+            using var pen = new Pen(Color.FromArgb(0xA8, 0xAF, 0xBA), 0.8f);
             g.FillPath(fill, path);
             g.DrawPath(pen, path);
         }
@@ -815,7 +864,8 @@ internal sealed class PadView : Control
 
     static void DsDpad(Graphics g, PointF c, bool up, bool down, bool left, bool right)
     {
-        // Four black keys, each a rounded block that narrows to a point toward the middle.
+        // Four black keys, each a rounded block that narrows to a point toward the middle,
+        // lit from above with a shadow on the shell below.
         void Key(bool pressed, float angle)
         {
             var state = g.Save();
@@ -823,13 +873,33 @@ internal sealed class PadView : Control
             g.RotateTransform(angle);
             using var path = new GraphicsPath();
             path.AddClosedCurve(new PointF[] { new(-8.5f, -23), new(8.5f, -23), new(9.5f, -10), new(0, -3.5f), new(-9.5f, -10) }, 0.22f);
+            g.Restore(state);
+
+            // Shadow and light are in screen space, so transform the key path first.
+            using var m = new Matrix();
+            m.Translate(c.X, c.Y);
+            m.Rotate(angle);
+            path.Transform(m);
             if (pressed)
-                Glow(g, new PointF(0, -13), 15, Theme.PsBlue, 190);
-            using var fill = new SolidBrush(pressed ? Theme.PsBlue : DsBlack);
-            g.FillPath(fill, path);
+                Glow(g, Center(path), 15, Theme.PsBlue, 190);
+            DropShadow(g, path, 2.2f, 110, 3);
+            FillVertical(g, path, pressed ? Color.FromArgb(0x7A, 0xA6, 0xFF) : Color.FromArgb(0x3C, 0x3E, 0x44),
+                pressed ? Theme.PsBlue : Color.FromArgb(0x12, 0x13, 0x15));
+            using var rim = new Pen(Color.FromArgb(90, 0xFF, 0xFF, 0xFF), 0.6f);
+            g.DrawPath(rim, path);
+
+            var arrowState = g.Save();
+            g.TranslateTransform(c.X, c.Y);
+            g.RotateTransform(angle);
             using var arrow = new SolidBrush(Color.FromArgb(0xEE, 0xF0, 0xF3));
             g.FillPolygon(arrow, new PointF[] { new(0, -17.5f), new(2.2f, -14.5f), new(-2.2f, -14.5f) });
-            g.Restore(state);
+            g.Restore(arrowState);
+        }
+
+        static PointF Center(GraphicsPath p)
+        {
+            var b = p.GetBounds();
+            return new PointF(b.X + b.Width / 2, b.Y + b.Height / 2);
         }
 
         Key(up, 0);
@@ -844,12 +914,21 @@ internal sealed class PadView : Control
         var rect = new RectangleF(c.X - r, c.Y - r, r * 2, r * 2);
         if (pressed)
             Glow(g, c, r * 2f, color, 120);
-        using (var fill = new SolidBrush(Color.FromArgb(0x2A, 0x2B, 0x2F)))
-        using (var rim = new Pen(pressed ? DsRing : Color.FromArgb(0x16, 0x17, 0x1A), pressed ? 2f : 1.2f))
+        using (var path = new GraphicsPath())
         {
-            g.FillEllipse(fill, rect);
-            g.DrawEllipse(rim, rect);
+            path.AddEllipse(rect);
+            DropShadow(g, path, 2.2f, 120, 3);
+            // Domed key: lighter toward the top-left.
+            using var dome = new PathGradientBrush(path)
+            {
+                CenterPoint = new PointF(c.X - r * 0.35f, c.Y - r * 0.45f),
+                CenterColor = Color.FromArgb(0x48, 0x4A, 0x51),
+                SurroundColors = new[] { Color.FromArgb(0x17, 0x18, 0x1B) },
+            };
+            g.FillPath(dome, path);
         }
+        using (var rim = new Pen(pressed ? DsRing : Color.FromArgb(0x0E, 0x0F, 0x11), pressed ? 2f : 1f))
+            g.DrawEllipse(rim, rect);
 
         using var pen = new Pen(pressed ? color : DsSymbol, pressed ? 1.9f : 1.1f) { LineJoin = LineJoin.Round, StartCap = LineCap.Round, EndCap = LineCap.Round };
         switch (symbol)
@@ -876,12 +955,31 @@ internal sealed class PadView : Control
         var k = new PointF(c.X + x / 32768f * travel, c.Y - y / 32768f * travel);
         if (pressed)
             Glow(g, k, cap + 9, Theme.PsBlue, 170);
-        using (var capFill = new SolidBrush(Color.FromArgb(0x2B, 0x2E, 0x3E)))
-            g.FillEllipse(capFill, k.X - cap, k.Y - cap, cap * 2, cap * 2);
-        using (var edge = new Pen(pressed ? DsRing : Color.FromArgb(0x12, 0x13, 0x18), pressed ? 2f : 1.2f))
-            g.DrawEllipse(edge, k.X - cap, k.Y - cap, cap * 2, cap * 2);
-        using (var ring = new Pen(pressed ? Color.FromArgb(0xBF, 0xD6, 0xFF) : Color.FromArgb(0x8E, 0x92, 0xA6), 0.8f))
-            g.DrawEllipse(ring, k.X - 12.5f, k.Y - 11, 25, 25);
+        var capRect = new RectangleF(k.X - cap, k.Y - cap, cap * 2, cap * 2);
+        using (var path = new GraphicsPath())
+        {
+            path.AddEllipse(capRect);
+            DropShadow(g, path, 2.5f, 140, 3);
+            // Outer skirt of the cap, lit on top.
+            FillVertical(g, path, Color.FromArgb(0x4A, 0x4E, 0x64), Color.FromArgb(0x16, 0x18, 0x22));
+        }
+        // Concave top: darker in the middle, a light ring around it.
+        var dish = new RectangleF(k.X - 14, k.Y - 13, 28, 28);
+        using (var dishPath = new GraphicsPath())
+        {
+            dishPath.AddEllipse(dish);
+            using var concave = new PathGradientBrush(dishPath)
+            {
+                CenterPoint = new PointF(k.X, k.Y + 3),
+                CenterColor = Color.FromArgb(0x1E, 0x21, 0x2E),
+                SurroundColors = new[] { Color.FromArgb(0x34, 0x38, 0x4C) },
+            };
+            g.FillPath(concave, dishPath);
+        }
+        using (var edge = new Pen(pressed ? DsRing : Color.FromArgb(0x0C, 0x0D, 0x12), pressed ? 2f : 1f))
+            g.DrawEllipse(edge, capRect);
+        using (var ring = new Pen(pressed ? Color.FromArgb(0xBF, 0xD6, 0xFF) : Color.FromArgb(0x9A, 0x9E, 0xB4), 0.8f))
+            g.DrawEllipse(ring, dish);
     }
 
     enum PsSymbol
